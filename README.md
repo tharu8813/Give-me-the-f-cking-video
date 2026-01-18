@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="icon.png" alt="icon" width="180">
+  <img src="icon.ico" alt="icon" width="180">
 </p>
 
 # GMTFV (야발 동영상 내와)
