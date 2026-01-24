@@ -3,6 +3,9 @@
 </p>
 
 # GMTFV (야발 동영상 내와)
+[![.NET](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
+[![Windows](https://img.shields.io/badge/Platform-Windows-0078D6?logo=windows)](https://www.microsoft.com/windows)
+[![License](https://img.shields.io/badge/License-GPL3.0-green.svg)](LICENSE)
 
 GMTFV는 YoutubeExplode 라이브러리 기반
 유튜브 고화질 동영상 다운로드 프로그램입니다.
