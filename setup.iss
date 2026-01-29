@@ -5,10 +5,10 @@
 ; ============================================================================
 
 #define MyAppName "GMTFV"
-#define MyAppVersion "3.1.0.0"
+#define MyAppVersion "3.2.0.0"
 #define MyAppPublisher "Ji Beak min(tharu8813)"
 #define MyAppCopyright "© 2024-2026 Ji Beak min(tharu8813). All rights reserved."
-#define MyAppURL "https://github.com/tharu8813"
+#define MyAppURL "https://github.com/tharu8813/Give-me-the-f-cking-video"
 #define MyAppExeName "GMTFV.exe"
 #define MyAppGUID "{{d27d3702-a216-4b19-aea8-d5367acee59f}"
 
@@ -32,9 +32,9 @@ AppPublisherURL={#MyAppURL}
 AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
 AppCopyright={#MyAppCopyright}
-DefaultDirName={localappdata}\{#MyAppName}
+DefaultDirName={commonpf}\{#MyAppName}
+PrivilegesRequired=admin
 DefaultGroupName={#MyAppName}
-PrivilegesRequired=lowest
 DisableProgramGroupPage=yes
 OutputDir=output-setup
 OutputBaseFilename={#MyAppName}-{#MyAppVersion}-setup
@@ -87,7 +87,6 @@ Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChang
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"
-Type: dirifempty; Name: "{localappdata}\{#MyAppPublisher}"
 
 [Code]
 { 이전 버전 제거를 위한 함수들 }

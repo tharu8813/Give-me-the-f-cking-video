@@ -29,113 +29,139 @@ namespace GMTFV.Start {
         /// </summary>
         private void InitializeComponent() {
             this.components = new System.ComponentModel.Container();
-            DataGridViewCellStyle dataGridViewCellStyle1 = new DataGridViewCellStyle();
-            DataGridViewCellStyle dataGridViewCellStyle2 = new DataGridViewCellStyle();
-
-            this.label1 = new Label();
-            this.progressBar1 = new ProgressBar();
-            this.button1 = new Button();
-            this.label3 = new Label();
-            this.label8 = new Label();
-            this.panel1 = new Panel();
-            this.panel2 = new Panel();
-            this.dataGridView1 = new DataGridView();
-            this.object_save = new DataGridViewTextBoxColumn();
-            this.Select = new DataGridViewCheckBoxColumn();
-            this.Index = new DataGridViewTextBoxColumn();
-            this.Image = new DataGridViewImageColumn();
-            this.TItle = new DataGridViewTextBoxColumn();
-            this.By = new DataGridViewTextBoxColumn();
-            this.VideoTIme = new DataGridViewTextBoxColumn();
-            this.Upload = new DataGridViewTextBoxColumn();
-            this.Info = new DataGridViewButtonColumn();
-            this.panel3 = new Panel();
-            this.button4 = new Button();
-            this.button3 = new Button();
-            this.button2 = new Button();
-            this.toolTip1 = new ToolTip(this.components);
-
+            System.Windows.Forms.DataGridViewCellStyle dataGridViewCellStyle1 = new System.Windows.Forms.DataGridViewCellStyle();
+            System.Windows.Forms.DataGridViewCellStyle dataGridViewCellStyle2 = new System.Windows.Forms.DataGridViewCellStyle();
+            System.Windows.Forms.DataGridViewCellStyle dataGridViewCellStyle3 = new System.Windows.Forms.DataGridViewCellStyle();
+            this.label1 = new System.Windows.Forms.Label();
+            this.progressBar1 = new System.Windows.Forms.ProgressBar();
+            this.button1 = new System.Windows.Forms.Button();
+            this.label3 = new System.Windows.Forms.Label();
+            this.label8 = new System.Windows.Forms.Label();
+            this.panel1 = new System.Windows.Forms.Panel();
+            this.dragDropLabel = new System.Windows.Forms.Label();
+            this.panel2 = new System.Windows.Forms.Panel();
+            this.dataGridView1 = new System.Windows.Forms.DataGridView();
+            this.object_save = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.Select = new System.Windows.Forms.DataGridViewCheckBoxColumn();
+            this.Index = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.Image = new System.Windows.Forms.DataGridViewImageColumn();
+            this.TItle = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.By = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.VideoTIme = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.Upload = new System.Windows.Forms.DataGridViewTextBoxColumn();
+            this.Info = new System.Windows.Forms.DataGridViewButtonColumn();
+            this.panel3 = new System.Windows.Forms.Panel();
+            this.button4 = new System.Windows.Forms.Button();
+            this.button3 = new System.Windows.Forms.Button();
+            this.button2 = new System.Windows.Forms.Button();
+            this.toolTip1 = new System.Windows.Forms.ToolTip(this.components);
+            this.headerPanel = new System.Windows.Forms.Panel();
             this.panel1.SuspendLayout();
             this.panel2.SuspendLayout();
-            ((ISupportInitialize)(this.dataGridView1)).BeginInit();
+            ((System.ComponentModel.ISupportInitialize)(this.dataGridView1)).BeginInit();
             this.panel3.SuspendLayout();
+            this.headerPanel.SuspendLayout();
             this.SuspendLayout();
-
             // 
             // label1
             // 
-            this.label1.Dock = DockStyle.Top;
-            this.label1.Font = new Font("맑은 고딕", 21.75F, FontStyle.Bold, GraphicsUnit.Point, ((byte)(129)));
-            this.label1.Location = new Point(10, 10);
+            this.label1.AutoSize = true;
+            this.label1.BackColor = System.Drawing.Color.Transparent;
+            this.label1.Font = new System.Drawing.Font("맑은 고딕", 24F, System.Drawing.FontStyle.Bold);
+            this.label1.ForeColor = System.Drawing.Color.White;
+            this.label1.Location = new System.Drawing.Point(20, 20);
             this.label1.Name = "label1";
-            this.label1.Size = new Size(791, 40);
+            this.label1.Size = new System.Drawing.Size(187, 45);
             this.label1.TabIndex = 0;
-            this.label1.Text = "야발 동영상 내놔";
-
+            this.label1.Text = "🎬 GMTFV";
             // 
             // progressBar1
             // 
-            this.progressBar1.Dock = DockStyle.Bottom;
-            this.progressBar1.Location = new Point(10, 412);
+            this.progressBar1.Dock = System.Windows.Forms.DockStyle.Top;
+            this.progressBar1.Location = new System.Drawing.Point(20, 10);
             this.progressBar1.Name = "progressBar1";
-            this.progressBar1.Size = new Size(791, 23);
-            this.progressBar1.TabIndex = 13;
-
+            this.progressBar1.Size = new System.Drawing.Size(960, 25);
+            this.progressBar1.Style = System.Windows.Forms.ProgressBarStyle.Continuous;
+            this.progressBar1.TabIndex = 0;
             // 
             // button1
             // 
-            this.button1.Dock = DockStyle.Right;
-            this.button1.Location = new Point(743, 0);
+            this.button1.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(52)))), ((int)(((byte)(73)))), ((int)(((byte)(94)))));
+            this.button1.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.button1.Dock = System.Windows.Forms.DockStyle.Right;
+            this.button1.FlatAppearance.BorderSize = 0;
+            this.button1.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.button1.Font = new System.Drawing.Font("맑은 고딕", 9.75F, System.Drawing.FontStyle.Bold);
+            this.button1.ForeColor = System.Drawing.Color.White;
+            this.button1.Location = new System.Drawing.Point(880, 10);
             this.button1.Name = "button1";
-            this.button1.Size = new Size(48, 23);
-            this.button1.TabIndex = 16;
-            this.button1.Text = "설정";
-            this.button1.UseVisualStyleBackColor = true;
-            this.button1.Click += new EventHandler(this.button1_Click);
-
+            this.button1.Size = new System.Drawing.Size(100, 30);
+            this.button1.TabIndex = 0;
+            this.button1.Text = "⚙️ 설정";
+            this.button1.UseVisualStyleBackColor = false;
+            this.button1.Click += new System.EventHandler(this.button1_Click);
+            this.button1.MouseEnter += new System.EventHandler(this.Button_MouseEnter);
+            this.button1.MouseLeave += new System.EventHandler(this.Button_MouseLeave);
             // 
             // label3
             // 
-            this.label3.Dock = DockStyle.Top;
-            this.label3.Location = new Point(10, 50);
+            this.label3.AutoSize = true;
+            this.label3.BackColor = System.Drawing.Color.Transparent;
+            this.label3.Font = new System.Drawing.Font("맑은 고딕", 10F);
+            this.label3.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(236)))), ((int)(((byte)(240)))), ((int)(((byte)(241)))));
+            this.label3.Location = new System.Drawing.Point(24, 68);
             this.label3.Name = "label3";
-            this.label3.Size = new Size(791, 15);
-            this.label3.TabIndex = 17;
-            this.label3.Text = "  유튜브 동영상을 보다 쉽게 다운받으세요!";
-
+            this.label3.Size = new System.Drawing.Size(295, 19);
+            this.label3.TabIndex = 1;
+            this.label3.Text = "유튜브 동영상을 빠르고 쉽게 다운로드하세요";
             // 
             // label8
             // 
-            this.label8.Dock = DockStyle.Bottom;
-            this.label8.Location = new Point(10, 393);
+            this.label8.Dock = System.Windows.Forms.DockStyle.Top;
+            this.label8.Font = new System.Drawing.Font("맑은 고딕", 9F);
+            this.label8.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(127)))), ((int)(((byte)(140)))), ((int)(((byte)(141)))));
+            this.label8.Location = new System.Drawing.Point(20, 35);
             this.label8.Name = "label8";
-            this.label8.Size = new Size(791, 19);
-            this.label8.TabIndex = 21;
-            this.label8.Text = "?% (0/0)";
-            this.label8.TextAlign = ContentAlignment.MiddleRight;
-
+            this.label8.Padding = new System.Windows.Forms.Padding(0, 5, 0, 5);
+            this.label8.Size = new System.Drawing.Size(960, 25);
+            this.label8.TabIndex = 1;
+            this.label8.Text = "준비됨";
+            this.label8.TextAlign = System.Drawing.ContentAlignment.MiddleLeft;
             // 
             // panel1
             // 
+            this.panel1.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(236)))), ((int)(((byte)(240)))), ((int)(((byte)(241)))));
             this.panel1.Controls.Add(this.button1);
-            this.panel1.Dock = DockStyle.Top;
-            this.panel1.Location = new Point(10, 65);
+            this.panel1.Controls.Add(this.dragDropLabel);
+            this.panel1.Dock = System.Windows.Forms.DockStyle.Top;
+            this.panel1.Location = new System.Drawing.Point(0, 100);
             this.panel1.Name = "panel1";
-            this.panel1.Size = new Size(791, 23);
-            this.panel1.TabIndex = 22;
-
+            this.panel1.Padding = new System.Windows.Forms.Padding(20, 10, 20, 10);
+            this.panel1.Size = new System.Drawing.Size(1000, 50);
+            this.panel1.TabIndex = 1;
+            // 
+            // dragDropLabel
+            // 
+            this.dragDropLabel.AutoSize = true;
+            this.dragDropLabel.Font = new System.Drawing.Font("맑은 고딕", 9F);
+            this.dragDropLabel.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(127)))), ((int)(((byte)(140)))), ((int)(((byte)(141)))));
+            this.dragDropLabel.Location = new System.Drawing.Point(20, 16);
+            this.dragDropLabel.Name = "dragDropLabel";
+            this.dragDropLabel.Size = new System.Drawing.Size(422, 15);
+            this.dragDropLabel.TabIndex = 1;
+            this.dragDropLabel.Text = "💡 팁: YouTube URL을 아래 목록으로 드래그 앤 드롭하여 추가할 수 있습니다";
             // 
             // panel2
             // 
+            this.panel2.BackColor = System.Drawing.Color.White;
             this.panel2.Controls.Add(this.dataGridView1);
-            this.panel2.Dock = DockStyle.Fill;
-            this.panel2.Location = new Point(10, 88);
+            this.panel2.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.panel2.Location = new System.Drawing.Point(0, 150);
             this.panel2.Name = "panel2";
-            this.panel2.Padding = new Padding(5);
-            this.panel2.Size = new Size(791, 305);
-            this.panel2.TabIndex = 23;
-            this.panel2.Paint += new PaintEventHandler(this.panel2_Paint);
-
+            this.panel2.Padding = new System.Windows.Forms.Padding(20, 15, 20, 15);
+            this.panel2.Size = new System.Drawing.Size(1000, 420);
+            this.panel2.TabIndex = 2;
+            this.panel2.Paint += new System.Windows.Forms.PaintEventHandler(this.panel2_Paint);
             // 
             // dataGridView1
             // 
@@ -143,51 +169,58 @@ namespace GMTFV.Start {
             this.dataGridView1.AllowUserToAddRows = false;
             this.dataGridView1.AllowUserToDeleteRows = false;
             this.dataGridView1.AllowUserToResizeRows = false;
-            this.dataGridView1.AutoSizeRowsMode = DataGridViewAutoSizeRowsMode.DisplayedCells;
-            dataGridViewCellStyle1.Alignment = DataGridViewContentAlignment.MiddleLeft;
-            dataGridViewCellStyle1.BackColor = SystemColors.Control;
-            dataGridViewCellStyle1.Font = new Font("맑은 고딕", 9F, FontStyle.Regular, GraphicsUnit.Point, ((byte)(129)));
-            dataGridViewCellStyle1.ForeColor = SystemColors.WindowText;
-            dataGridViewCellStyle1.NullValue = "NULL";
-            dataGridViewCellStyle1.SelectionBackColor = SystemColors.Highlight;
-            dataGridViewCellStyle1.SelectionForeColor = SystemColors.HighlightText;
-            dataGridViewCellStyle1.WrapMode = DataGridViewTriState.True;
+            this.dataGridView1.AutoSizeRowsMode = System.Windows.Forms.DataGridViewAutoSizeRowsMode.DisplayedCells;
+            this.dataGridView1.BackgroundColor = System.Drawing.Color.White;
+            this.dataGridView1.CellBorderStyle = System.Windows.Forms.DataGridViewCellBorderStyle.SingleHorizontal;
+            dataGridViewCellStyle1.Alignment = System.Windows.Forms.DataGridViewContentAlignment.MiddleLeft;
+            dataGridViewCellStyle1.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(52)))), ((int)(((byte)(73)))), ((int)(((byte)(94)))));
+            dataGridViewCellStyle1.Font = new System.Drawing.Font("맑은 고딕", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(129)));
+            dataGridViewCellStyle1.ForeColor = System.Drawing.Color.White;
+            dataGridViewCellStyle1.Padding = new System.Windows.Forms.Padding(5);
+            dataGridViewCellStyle1.SelectionBackColor = System.Drawing.Color.FromArgb(((int)(((byte)(52)))), ((int)(((byte)(73)))), ((int)(((byte)(94)))));
+            dataGridViewCellStyle1.SelectionForeColor = System.Drawing.Color.White;
+            dataGridViewCellStyle1.WrapMode = System.Windows.Forms.DataGridViewTriState.True;
             this.dataGridView1.ColumnHeadersDefaultCellStyle = dataGridViewCellStyle1;
-            this.dataGridView1.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-            this.dataGridView1.Columns.AddRange(new DataGridViewColumn[] {
-                this.object_save,
-                this.Select,
-                this.Index,
-                this.Image,
-                this.TItle,
-                this.By,
-                this.VideoTIme,
-                this.Upload,
-                this.Info});
-            dataGridViewCellStyle2.Alignment = DataGridViewContentAlignment.MiddleLeft;
-            dataGridViewCellStyle2.BackColor = SystemColors.Window;
-            dataGridViewCellStyle2.Font = new Font("맑은 고딕", 9F, FontStyle.Regular, GraphicsUnit.Point, ((byte)(129)));
-            dataGridViewCellStyle2.ForeColor = SystemColors.ControlText;
-            dataGridViewCellStyle2.SelectionBackColor = SystemColors.Highlight;
-            dataGridViewCellStyle2.SelectionForeColor = SystemColors.HighlightText;
-            dataGridViewCellStyle2.WrapMode = DataGridViewTriState.True;
+            this.dataGridView1.ColumnHeadersHeight = 40;
+            this.dataGridView1.ColumnHeadersHeightSizeMode = System.Windows.Forms.DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
+            this.dataGridView1.Columns.AddRange(new System.Windows.Forms.DataGridViewColumn[] {
+            this.object_save,
+            this.Select,
+            this.Index,
+            this.Image,
+            this.TItle,
+            this.By,
+            this.VideoTIme,
+            this.Upload,
+            this.Info});
+            dataGridViewCellStyle2.Alignment = System.Windows.Forms.DataGridViewContentAlignment.MiddleLeft;
+            dataGridViewCellStyle2.BackColor = System.Drawing.Color.White;
+            dataGridViewCellStyle2.Font = new System.Drawing.Font("맑은 고딕", 9F, System.Drawing.FontStyle.Regular, System.Drawing.GraphicsUnit.Point, ((byte)(129)));
+            dataGridViewCellStyle2.ForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(44)))), ((int)(((byte)(62)))), ((int)(((byte)(80)))));
+            dataGridViewCellStyle2.Padding = new System.Windows.Forms.Padding(5);
+            dataGridViewCellStyle2.SelectionBackColor = System.Drawing.Color.FromArgb(((int)(((byte)(189)))), ((int)(((byte)(195)))), ((int)(((byte)(199)))));
+            dataGridViewCellStyle2.SelectionForeColor = System.Drawing.Color.FromArgb(((int)(((byte)(44)))), ((int)(((byte)(62)))), ((int)(((byte)(80)))));
+            dataGridViewCellStyle2.WrapMode = System.Windows.Forms.DataGridViewTriState.True;
             this.dataGridView1.DefaultCellStyle = dataGridViewCellStyle2;
-            this.dataGridView1.Dock = DockStyle.Fill;
-            this.dataGridView1.Location = new Point(5, 5);
-            this.dataGridView1.Margin = new Padding(0);
+            this.dataGridView1.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.dataGridView1.EnableHeadersVisualStyles = false;
+            this.dataGridView1.GridColor = System.Drawing.Color.FromArgb(((int)(((byte)(236)))), ((int)(((byte)(240)))), ((int)(((byte)(241)))));
+            this.dataGridView1.Location = new System.Drawing.Point(20, 15);
+            this.dataGridView1.MultiSelect = false;
             this.dataGridView1.Name = "dataGridView1";
             this.dataGridView1.RowHeadersVisible = false;
             this.dataGridView1.RowHeadersWidth = 30;
-            this.dataGridView1.RowTemplate.Height = 23;
-            this.dataGridView1.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-            this.dataGridView1.Size = new Size(781, 295);
-            this.dataGridView1.TabIndex = 24;
-            this.dataGridView1.CellContentClick += new DataGridViewCellEventHandler(this.dataGridView1_CellContentClick);
-            this.dataGridView1.DragDrop += new DragEventHandler(this.dataGridView1_DragDrop);
-            this.dataGridView1.DragEnter += new DragEventHandler(this.dataGridView1_DragEnter);
-            this.dataGridView1.DragLeave += new EventHandler(this.dataGridView1_DragLeave);
-            this.dataGridView1.KeyDown += new KeyEventHandler(this.dataGridView1_KeyDown);
-
+            dataGridViewCellStyle3.Padding = new System.Windows.Forms.Padding(5);
+            this.dataGridView1.RowsDefaultCellStyle = dataGridViewCellStyle3;
+            this.dataGridView1.RowTemplate.Height = 80;
+            this.dataGridView1.SelectionMode = System.Windows.Forms.DataGridViewSelectionMode.FullRowSelect;
+            this.dataGridView1.Size = new System.Drawing.Size(960, 390);
+            this.dataGridView1.TabIndex = 0;
+            this.dataGridView1.CellContentClick += new System.Windows.Forms.DataGridViewCellEventHandler(this.dataGridView1_CellContentClick);
+            this.dataGridView1.DragDrop += new System.Windows.Forms.DragEventHandler(this.dataGridView1_DragDrop);
+            this.dataGridView1.DragEnter += new System.Windows.Forms.DragEventHandler(this.dataGridView1_DragEnter);
+            this.dataGridView1.DragLeave += new System.EventHandler(this.dataGridView1_DragLeave);
+            this.dataGridView1.KeyDown += new System.Windows.Forms.KeyEventHandler(this.dataGridView1_KeyDown);
             // 
             // object_save
             // 
@@ -195,154 +228,190 @@ namespace GMTFV.Start {
             this.object_save.Name = "object_save";
             this.object_save.ReadOnly = true;
             this.object_save.Visible = false;
-
             // 
             // Select
             // 
-            this.Select.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
-            this.Select.FillWeight = 30F;
-            this.Select.HeaderText = "";
-            this.Select.MinimumWidth = 30;
+            this.Select.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.None;
+            this.Select.FillWeight = 40F;
+            this.Select.HeaderText = "선택";
+            this.Select.MinimumWidth = 40;
             this.Select.Name = "Select";
-            this.Select.Width = 30;
-
+            this.Select.Width = 40;
             // 
             // Index
             // 
-            this.Index.FillWeight = 30F;
+            this.Index.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.None;
+            this.Index.FillWeight = 50F;
             this.Index.HeaderText = "No";
             this.Index.Name = "Index";
             this.Index.ReadOnly = true;
-            this.Index.Width = 30;
-
+            this.Index.Width = 50;
             // 
             // Image
             // 
-            this.Image.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
-            this.Image.FillWeight = 50F;
+            this.Image.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.None;
+            this.Image.FillWeight = 120F;
             this.Image.HeaderText = "썸네일";
-            this.Image.ImageLayout = DataGridViewImageCellLayout.Zoom;
+            this.Image.ImageLayout = System.Windows.Forms.DataGridViewImageCellLayout.Zoom;
             this.Image.Name = "Image";
             this.Image.ReadOnly = true;
-
+            this.Image.Width = 120;
             // 
             // TItle
             // 
-            this.TItle.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
+            this.TItle.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.Fill;
             this.TItle.HeaderText = "제목";
             this.TItle.Name = "TItle";
             this.TItle.ReadOnly = true;
-
             // 
             // By
             // 
-            this.By.HeaderText = "저자";
+            this.By.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.None;
+            this.By.HeaderText = "채널";
             this.By.Name = "By";
             this.By.ReadOnly = true;
-
+            this.By.Width = 150;
             // 
             // VideoTIme
             // 
+            this.VideoTIme.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.None;
             this.VideoTIme.HeaderText = "길이";
             this.VideoTIme.Name = "VideoTIme";
             this.VideoTIme.ReadOnly = true;
-
+            this.VideoTIme.Width = 80;
             // 
             // Upload
             // 
-            this.Upload.HeaderText = "업로드 일자";
+            this.Upload.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.None;
+            this.Upload.HeaderText = "업로드일";
             this.Upload.Name = "Upload";
             this.Upload.ReadOnly = true;
-
+            this.Upload.Width = 110;
             // 
             // Info
             // 
-            this.Info.FillWeight = 40F;
+            this.Info.AutoSizeMode = System.Windows.Forms.DataGridViewAutoSizeColumnMode.None;
+            this.Info.FillWeight = 70F;
             this.Info.HeaderText = "상세";
             this.Info.Name = "Info";
             this.Info.ReadOnly = true;
-            this.Info.Width = 40;
-
+            this.Info.Width = 70;
             // 
             // panel3
             // 
+            this.panel3.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(236)))), ((int)(((byte)(240)))), ((int)(((byte)(241)))));
             this.panel3.Controls.Add(this.button4);
             this.panel3.Controls.Add(this.button3);
             this.panel3.Controls.Add(this.button2);
-            this.panel3.Dock = DockStyle.Bottom;
-            this.panel3.Location = new Point(10, 435);
+            this.panel3.Controls.Add(this.label8);
+            this.panel3.Controls.Add(this.progressBar1);
+            this.panel3.Dock = System.Windows.Forms.DockStyle.Bottom;
+            this.panel3.Location = new System.Drawing.Point(0, 570);
             this.panel3.Name = "panel3";
-            this.panel3.Size = new Size(791, 33);
-            this.panel3.TabIndex = 24;
-
+            this.panel3.Padding = new System.Windows.Forms.Padding(20, 10, 20, 20);
+            this.panel3.Size = new System.Drawing.Size(1000, 130);
+            this.panel3.TabIndex = 3;
             // 
             // button4
             // 
-            this.button4.Dock = DockStyle.Fill;
-            this.button4.Font = new Font("맑은 고딕", 12F, FontStyle.Regular, GraphicsUnit.Point, ((byte)(129)));
-            this.button4.Location = new Point(0, 0);
+            this.button4.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(41)))), ((int)(((byte)(128)))), ((int)(((byte)(185)))));
+            this.button4.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.button4.Dock = System.Windows.Forms.DockStyle.Fill;
+            this.button4.FlatAppearance.BorderSize = 0;
+            this.button4.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.button4.Font = new System.Drawing.Font("맑은 고딕", 12F, System.Drawing.FontStyle.Bold);
+            this.button4.ForeColor = System.Drawing.Color.White;
+            this.button4.Location = new System.Drawing.Point(20, 60);
             this.button4.Name = "button4";
-            this.button4.Size = new Size(647, 33);
-            this.button4.TabIndex = 13;
-            this.button4.Text = "다운로드하기";
-            this.button4.UseVisualStyleBackColor = true;
-            this.button4.Click += new EventHandler(this.button4_Click);
-
+            this.button4.Size = new System.Drawing.Size(660, 50);
+            this.button4.TabIndex = 4;
+            this.button4.Text = "⬇️ 다운로드 시작";
+            this.button4.UseVisualStyleBackColor = false;
+            this.button4.Click += new System.EventHandler(this.button4_Click);
+            this.button4.MouseEnter += new System.EventHandler(this.Button_MouseEnter);
+            this.button4.MouseLeave += new System.EventHandler(this.Button_MouseLeave);
             // 
             // button3
             // 
-            this.button3.Dock = DockStyle.Right;
-            this.button3.Location = new Point(647, 0);
+            this.button3.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(231)))), ((int)(((byte)(76)))), ((int)(((byte)(60)))));
+            this.button3.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.button3.Dock = System.Windows.Forms.DockStyle.Right;
+            this.button3.FlatAppearance.BorderSize = 0;
+            this.button3.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.button3.Font = new System.Drawing.Font("맑은 고딕", 10F, System.Drawing.FontStyle.Bold);
+            this.button3.ForeColor = System.Drawing.Color.White;
+            this.button3.Location = new System.Drawing.Point(680, 60);
             this.button3.Name = "button3";
-            this.button3.Size = new Size(75, 33);
-            this.button3.TabIndex = 26;
-            this.button3.Text = "삭제하기";
-            this.button3.UseVisualStyleBackColor = true;
-            this.button3.Click += new EventHandler(this.button3_Click);
-
+            this.button3.Size = new System.Drawing.Size(150, 50);
+            this.button3.TabIndex = 3;
+            this.button3.Text = "🗑️ 선택 삭제";
+            this.button3.UseVisualStyleBackColor = false;
+            this.button3.Click += new System.EventHandler(this.button3_Click);
+            this.button3.MouseEnter += new System.EventHandler(this.Button_MouseEnter);
+            this.button3.MouseLeave += new System.EventHandler(this.Button_MouseLeave);
             // 
             // button2
             // 
-            this.button2.Dock = DockStyle.Right;
-            this.button2.Location = new Point(722, 0);
+            this.button2.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(46)))), ((int)(((byte)(204)))), ((int)(((byte)(113)))));
+            this.button2.Cursor = System.Windows.Forms.Cursors.Hand;
+            this.button2.Dock = System.Windows.Forms.DockStyle.Right;
+            this.button2.FlatAppearance.BorderSize = 0;
+            this.button2.FlatStyle = System.Windows.Forms.FlatStyle.Flat;
+            this.button2.Font = new System.Drawing.Font("맑은 고딕", 10F, System.Drawing.FontStyle.Bold);
+            this.button2.ForeColor = System.Drawing.Color.White;
+            this.button2.Location = new System.Drawing.Point(830, 60);
             this.button2.Name = "button2";
-            this.button2.Size = new Size(69, 33);
-            this.button2.TabIndex = 25;
-            this.button2.Text = "추가하기";
-            this.button2.UseVisualStyleBackColor = true;
-            this.button2.Click += new EventHandler(this.button2_Click);
-
+            this.button2.Size = new System.Drawing.Size(150, 50);
+            this.button2.TabIndex = 2;
+            this.button2.Text = "➕ URL 추가";
+            this.button2.UseVisualStyleBackColor = false;
+            this.button2.Click += new System.EventHandler(this.button2_Click);
+            this.button2.MouseEnter += new System.EventHandler(this.Button_MouseEnter);
+            this.button2.MouseLeave += new System.EventHandler(this.Button_MouseLeave);
             // 
             // toolTip1
             // 
-            this.toolTip1.AutomaticDelay = 0;
             this.toolTip1.IsBalloon = true;
-            this.toolTip1.ToolTipTitle = "상세 정보";
-
+            this.toolTip1.ToolTipTitle = "정보";
+            // 
+            // headerPanel
+            // 
+            this.headerPanel.BackColor = System.Drawing.Color.FromArgb(((int)(((byte)(41)))), ((int)(((byte)(128)))), ((int)(((byte)(185)))));
+            this.headerPanel.Controls.Add(this.label1);
+            this.headerPanel.Controls.Add(this.label3);
+            this.headerPanel.Dock = System.Windows.Forms.DockStyle.Top;
+            this.headerPanel.Location = new System.Drawing.Point(0, 0);
+            this.headerPanel.Name = "headerPanel";
+            this.headerPanel.Padding = new System.Windows.Forms.Padding(20, 15, 20, 15);
+            this.headerPanel.Size = new System.Drawing.Size(1000, 100);
+            this.headerPanel.TabIndex = 0;
             // 
             // MainFrom
             // 
-            this.ClientSize = new Size(811, 478);
+            this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
+            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+            this.BackColor = System.Drawing.Color.White;
+            this.ClientSize = new System.Drawing.Size(1000, 700);
             this.Controls.Add(this.panel2);
             this.Controls.Add(this.panel1);
-            this.Controls.Add(this.label8);
-            this.Controls.Add(this.label3);
-            this.Controls.Add(this.progressBar1);
-            this.Controls.Add(this.label1);
+            this.Controls.Add(this.headerPanel);
             this.Controls.Add(this.panel3);
-            this.FormBorderStyle = FormBorderStyle.Sizable;
-            this.MaximumSize = new Size(1000, 750);
-            this.MinimumSize = new Size(600, 300);
+            this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.Sizable;
+            this.MaximumSize = new System.Drawing.Size(1920, 1080);
+            this.MinimumSize = new System.Drawing.Size(800, 600);
             this.Name = "MainFrom";
-            this.Padding = new Padding(10);
-            this.Text = "야발 동영상 내놔";
-            this.Load += new EventHandler(this.MainFrom_Load);
-
+            this.Text = "GMTFV - 유튜브 동영상 다운로더";
+            this.Load += new System.EventHandler(this.MainFrom_Load);
+            this.Shown += new System.EventHandler(this.MainFrom_Shown);
             this.panel1.ResumeLayout(false);
+            this.panel1.PerformLayout();
             this.panel2.ResumeLayout(false);
-            ((ISupportInitialize)(this.dataGridView1)).EndInit();
+            ((System.ComponentModel.ISupportInitialize)(this.dataGridView1)).EndInit();
             this.panel3.ResumeLayout(false);
+            this.headerPanel.ResumeLayout(false);
+            this.headerPanel.PerformLayout();
             this.ResumeLayout(false);
+
         }
 
         #endregion
@@ -369,5 +438,7 @@ namespace GMTFV.Start {
         private DataGridViewTextBoxColumn VideoTIme;
         private DataGridViewTextBoxColumn Upload;
         private DataGridViewButtonColumn Info;
+        private Panel headerPanel;
+        private Label dragDropLabel;
     }
 }

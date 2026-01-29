@@ -1,5 +1,6 @@
-﻿using System;
-using System.Collections;
+﻿using GMTFV.Properties;
+using GMTFV.tools;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.Drawing;
@@ -9,8 +10,6 @@ using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
-using GMTFV.Properties;
-using GMTFV.tools;
 using YoutubeExplode;
 using YoutubeExplode.Common;
 using YoutubeExplode.Converter;
@@ -354,8 +353,21 @@ namespace GMTFV.Start {
         }
 
         private void panel2_Paint(object sender, PaintEventArgs e) {
-            e.Graphics.DrawRectangle(new Pen(borderColor, 2f),
-                new Rectangle(1, 1, panel2.ClientRectangle.Width - 2, panel2.ClientRectangle.Height - 2));
+            if (borderColor == Color.Green) {
+                // 녹색 테두리 (허용된 드롭)
+                using (Pen pen = new Pen(Color.FromArgb(46, 204, 113), 3)) {
+                    pen.DashStyle = System.Drawing.Drawing2D.DashStyle.Dash;
+                    e.Graphics.DrawRectangle(pen,
+                        new Rectangle(15, 10, panel2.ClientRectangle.Width - 30, panel2.ClientRectangle.Height - 20));
+                }
+            } else if (borderColor == Color.Red) {
+                // 빨간색 테두리 (거부된 드롭)
+                using (Pen pen = new Pen(Color.FromArgb(231, 76, 60), 3)) {
+                    pen.DashStyle = System.Drawing.Drawing2D.DashStyle.Dash;
+                    e.Graphics.DrawRectangle(pen,
+                        new Rectangle(15, 10, panel2.ClientRectangle.Width - 30, panel2.ClientRectangle.Height - 10));
+                }
+            }
         }
 
         private void dataGridView1_DragLeave(object sender, EventArgs e) {
@@ -394,7 +406,7 @@ namespace GMTFV.Start {
         }
 
         private void button3_Click(object sender, EventArgs e) {
-            List<DataGridViewRow> checkedRows = GetCheckedRows();
+            List<DataGridViewRow> checkedRows = Tol.GetCheckedRows(dataGridView1);
             if (checkedRows.Count == 0) {
                 MessageBox.Show("삭제할 행을 선택해주세요.", "알림", MessageBoxButtons.OK, MessageBoxIcon.Asterisk);
                 return;
@@ -414,21 +426,6 @@ namespace GMTFV.Start {
                 }
                 dataGridView1.Rows.Remove(row);
             }
-        }
-
-        private List<DataGridViewRow> GetCheckedRows() {
-            List<DataGridViewRow> checkedRows = new List<DataGridViewRow>();
-            foreach (DataGridViewRow row in dataGridView1.Rows) {
-                if (!row.IsNewRow) {
-                    try {
-                        if (Convert.ToBoolean(row.Cells["Select"].Value)) {
-                            checkedRows.Add(row);
-                        }
-                    } catch {
-                    }
-                }
-            }
-            return checkedRows;
         }
 
         private void dataGridView1_KeyDown(object sender, KeyEventArgs e) {
@@ -551,7 +548,7 @@ namespace GMTFV.Start {
 
                         var conversionRequestBuilder = new ConversionRequestBuilder(videoFile);
                         conversionRequestBuilder.SetContainer(fileExtension);
-                        conversionRequestBuilder.SetFFmpegPath("tools/ffmpeg.exe");
+                        conversionRequestBuilder.SetFFmpegPath(Path.Combine(Tol.AppdataPath, "ffmpeg.exe"));
                         conversionRequestBuilder.SetPreset(ConversionPreset.UltraFast);
                         var conversionRequest = conversionRequestBuilder.Build();
 
@@ -600,5 +597,85 @@ namespace GMTFV.Start {
                 label8.Text = "";
             }
         }
+
+        void ToggleControls(bool isE) {
+            button1.Enabled = isE;
+            button2.Enabled = isE;
+            button3.Enabled = isE;
+            button4.Enabled = isE;
+            dataGridView1.Enabled = isE;
+        }
+
+        private async void MainFrom_Shown(object sender, EventArgs e) {
+            string baseDir = Tol.AppdataPath;
+            string ffmpegPath = Path.Combine(baseDir, "ffmpeg.exe");
+            Console.WriteLine(ffmpegPath);
+            try {
+                ToggleControls(false);
+
+                await GitHubUpdater.CheckAndUpdateAsync(
+                    "tharu8813",
+                    "Give-me-the-f-cking-video",
+                    new Version(Application.ProductVersion),
+                    progressBar1,
+                    label8
+                );
+
+                label8.Text = "(최초 실행시 시도) FFmpeg 준비 중...";
+                progressBar1.Value = 0;
+
+                var progress = new Progress<Tol.FFmpegProgress>(p => {
+                    progressBar1.Value = p.Percentage;
+                    label8.Text = p.Message;
+                });
+
+                await Tol.EnsureFFmpegAsync(
+                    baseDir,
+                    progress
+                );
+
+                label8.Text = "준비 완료!";
+                progressBar1.Value = 0;
+            } catch (Exception ex) {
+                Tol.ShowError("FFmpeg 초기화 실패:\n" + ex.Message);
+                Close();
+            } finally {
+                progressBar1.Style = ProgressBarStyle.Blocks;
+                ToggleControls(true);
+            }
+        }
+
+        private void Button_MouseEnter(object sender, EventArgs e) {
+            if (sender is Button btn && btn.Enabled) {
+                btn.FlatAppearance.BorderSize = 0;
+
+                // 원래 색상을 약간 밝게 변경
+                Color originalColor = btn.BackColor;
+                int r = Math.Min(255, originalColor.R + 20);
+                int g = Math.Min(255, originalColor.G + 20);
+                int b = Math.Min(255, originalColor.B + 20);
+                btn.BackColor = Color.FromArgb(r, g, b);
+            }
+        }
+
+        private void Button_MouseLeave(object sender, EventArgs e) {
+            if (sender is Button btn) {
+                btn.FlatAppearance.BorderSize = 0;
+
+                // 원래 색상으로 복원
+                if (btn.Name == "button1") {
+                    btn.BackColor = Color.FromArgb(52, 73, 94);
+                } else if (btn.Name == "button2") {
+                    btn.BackColor = Color.FromArgb(46, 204, 113);
+                } else if (btn.Name == "button3") {
+                    btn.BackColor = Color.FromArgb(231, 76, 60);
+                } else if (btn.Name == "button4") {
+                    btn.BackColor = Color.FromArgb(41, 128, 185);
+                }
+            }
+        }
+
+        // 드래그 앤 드롭 시각적 피드백 개선
+
     }
 }
