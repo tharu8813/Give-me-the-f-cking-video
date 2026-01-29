@@ -17,9 +17,6 @@ GMTFV는 [YoutubeExplode](https://github.com/Tyrrrz/YoutubeExplode) 라이브러
 유튜브 고화질 동영상 다운로드 프로그램입니다.
 
 
-## 다운로드
-[다운로드 하기](https://github.com/tharu8813/Give-me-the-f-cking-video/releases/latest)
-
 ## 책임 제한
 
 본 소프트웨어를 사용함으로 인해 발생하는  
