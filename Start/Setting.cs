@@ -7,7 +7,7 @@ using System.IO;
 using System.Windows.Forms;
 
 namespace GMTFV.Start {
-    public partial class Setting : DevForm {
+    public partial class Setting : GMTFV.DevForm {
         public Setting() {
             InitializeComponent();
         }

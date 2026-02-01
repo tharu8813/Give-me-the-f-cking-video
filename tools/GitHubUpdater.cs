@@ -51,8 +51,7 @@ public static class GitHubUpdater {
                 }
 
                 JArray assets = (JArray)release["assets"];
-                JToken asset = assets.FirstOrDefault(a =>
-                {
+                JToken asset = assets.FirstOrDefault(a => {
                     string name = a["name"]?.ToString().ToLower();
                     return name != null &&
                            name.Contains("setup") &&

@@ -1,4 +1,5 @@
 ﻿using GMTFV.Start;
+using GMTFV.tools;
 using System;
 using System.Windows.Forms;
 
@@ -11,7 +12,13 @@ namespace GMTFV {
         static void Main() {
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
-            Application.Run(new MainFrom());
+
+            Environment.SetEnvironmentVariable(
+                "WEBVIEW2_USER_DATA_FOLDER",
+                Tol.AppdataPath
+            );
+
+            Application.Run(new MainForm());
         }
     }
 }

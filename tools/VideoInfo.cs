@@ -46,5 +46,7 @@ namespace GMTFV.tools {
         /// 저장 타입 (영상 / 오디오 + 포맷)
         /// </summary>
         public TypeSaveVideo TypeSave { get; set; }
+
+        public string Tag { get; set; }
     }
 }

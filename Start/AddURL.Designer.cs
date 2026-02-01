@@ -62,7 +62,7 @@ namespace GMTFV.Start {
             this.headerTitle.ForeColor = System.Drawing.Color.White;
             this.headerTitle.Location = new System.Drawing.Point(20, 20);
             this.headerTitle.Name = "headerTitle";
-            this.headerTitle.Size = new System.Drawing.Size(159, 32);
+            this.headerTitle.Size = new System.Drawing.Size(160, 32);
             this.headerTitle.TabIndex = 0;
             this.headerTitle.Text = "➕ 영상 추가";
             // 
@@ -128,7 +128,7 @@ namespace GMTFV.Start {
             this.label1.Font = new System.Drawing.Font("맑은 고딕", 9.75F, System.Drawing.FontStyle.Bold);
             this.label1.Location = new System.Drawing.Point(15, 30);
             this.label1.Name = "label1";
-            this.label1.Size = new System.Drawing.Size(182, 17);
+            this.label1.Size = new System.Drawing.Size(185, 17);
             this.label1.TabIndex = 0;
             this.label1.Text = "📝 추가할 주소를 입력하세요";
             // 
@@ -182,7 +182,6 @@ namespace GMTFV.Start {
             this.Controls.Add(this.bottomPanel);
             this.Font = new System.Drawing.Font("맑은 고딕", 9F);
             this.FormBorderStyle = System.Windows.Forms.FormBorderStyle.FixedDialog;
-            this.MaximizeBox = false;
             this.MinimizeBox = false;
             this.Name = "AddURL";
             this.StartPosition = System.Windows.Forms.FormStartPosition.CenterParent;
