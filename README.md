@@ -2,7 +2,7 @@
   <img src="icon.ico" alt="icon" width="180">
 </p>
 
-# GMTFV (야발 동영상 내와)
+# GMTFV (야발아 동영상 내와)
 [![.NET Framework](https://img.shields.io/badge/.NET%20Framework-4.7.2%20WinForms-512BD4)](https://dotnet.microsoft.com/download/dotnet-framework)
 [![Windows](https://img.shields.io/badge/Platform-Windows-0078D6?logo=windows)](https://www.microsoft.com/windows)
 [![License](https://img.shields.io/badge/License-GPL3.0-green.svg)](LICENSE)
