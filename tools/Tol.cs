@@ -1,11 +1,12 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
-using System.Net;
+
 using System.Net.Http;
+using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -33,6 +34,26 @@ namespace GMTFV.tools {
                     return Path.GetTempPath();
                 }
             }
+        }
+
+        // ======================
+        // 공유 HttpClient
+        // ======================
+
+        /// <summary>
+        /// 애플리케이션 전체에서 재사용되는 공유 HttpClient 인스턴스.
+        /// 소켓 고갈을 방지하기 위해 단일 인스턴스를 공유합니다.
+        /// </summary>
+        public static HttpClient SharedHttpClient { get; } = CreateSharedHttpClient();
+
+        private static HttpClient CreateSharedHttpClient() {
+            var client = new HttpClient {
+                Timeout = TimeSpan.FromMinutes(10)
+            };
+            client.DefaultRequestHeaders.Add(
+                "User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
+            return client;
         }
 
         // ======================
@@ -182,8 +203,7 @@ namespace GMTFV.tools {
             if (!ShowQ("FFmpeg 구성 요소가 설치되어 있지 않습니다.\n" +
                 "해당 기능을 사용하려면 FFmpeg 다운로드가 필요합니다.\n\n" +
                 "지금 다운로드하시겠습니까?")) {
-                Application.Exit();
-                return;
+                throw new OperationCanceledException("사용자가 FFmpeg 다운로드를 취소했습니다.");
             }
 
             string zipPath = Path.Combine(Path.GetTempPath(), "ffmpeg.zip");
@@ -202,17 +222,32 @@ namespace GMTFV.tools {
                     Directory.CreateDirectory(targetDirectory);
                 }
 
-                using (var wc = new WebClient()) {
-                    wc.DownloadProgressChanged += (s, e) => {
-                        try {
-                            progress?.Report(new FFmpegProgress {
-                                Percentage = e.ProgressPercentage,
-                                Message = $"FFmpeg 다운로드 중... {e.ProgressPercentage}%"
-                            });
-                        } catch { }
-                    };
+                using (var response = await SharedHttpClient.GetAsync(
+                    new Uri(downloadUrl),
+                    HttpCompletionOption.ResponseHeadersRead)) {
 
-                    await wc.DownloadFileTaskAsync(new Uri(downloadUrl), zipPath);
+                    response.EnsureSuccessStatusCode();
+                    long? totalBytes = response.Content.Headers.ContentLength;
+
+                    using (var contentStream = await response.Content.ReadAsStreamAsync())
+                    using (var fileStream = new FileStream(zipPath, FileMode.Create, FileAccess.Write, FileShare.None)) {
+                        byte[] buffer = new byte[8192];
+                        long totalRead = 0;
+                        int bytesRead;
+
+                        while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length)) > 0) {
+                            await fileStream.WriteAsync(buffer, 0, bytesRead);
+                            totalRead += bytesRead;
+
+                            if (totalBytes.HasValue && progress != null) {
+                                int pct = (int)((totalRead * 100L) / totalBytes.Value);
+                                progress.Report(new FFmpegProgress {
+                                    Percentage = pct,
+                                    Message = $"FFmpeg 다운로드 중... {pct}%"
+                                });
+                            }
+                        }
+                    }
                 }
 
                 progress?.Report(new FFmpegProgress {
@@ -287,7 +322,16 @@ namespace GMTFV.tools {
             }
 
             try {
-                string sanitized = string.Concat(fileName.Split(Path.GetInvalidFileNameChars()));
+                char[] invalidChars = Path.GetInvalidFileNameChars();
+                StringBuilder sb = new StringBuilder(fileName.Length);
+                foreach (char c in fileName) {
+                    if (Array.IndexOf(invalidChars, c) >= 0) {
+                        sb.Append(replacement);
+                    } else {
+                        sb.Append(c);
+                    }
+                }
+                string sanitized = sb.ToString().Trim();
 
                 // 빈 문자열인 경우
                 if (string.IsNullOrWhiteSpace(sanitized)) {

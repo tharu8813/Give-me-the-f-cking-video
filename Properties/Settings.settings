@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8"?>
+<?xml version="1.0" encoding="utf-8"?>
 <SettingsFile xmlns="http://schemas.microsoft.com/VisualStudio/2004/01/settings"
               CurrentProfile="(Default)">
   <Profiles />
@@ -11,6 +11,21 @@
     </Setting>
     <Setting Name="SubType" Type="System.String" Scope="User">
       <Value Profile="(Default)">mp4</Value>
+    </Setting>
+    <Setting Name="FileNameTemplate" Type="System.String" Scope="User">
+      <Value Profile="(Default)">%title%_%date%</Value>
+    </Setting>
+    <Setting Name="LastYtDlpUpdateCheck" Type="System.DateTime" Scope="User">
+      <Value Profile="(Default)">1900-01-01</Value>
+    </Setting>
+    <Setting Name="GPUAccelerator" Type="System.String" Scope="User">
+      <Value Profile="(Default)">CPU</Value>
+    </Setting>
+    <Setting Name="AudioBitrate" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">192</Value>
+    </Setting>
+    <Setting Name="MaxConcurrentDownloads" Type="System.Int32" Scope="User">
+      <Value Profile="(Default)">1</Value>
     </Setting>
   </Settings>
 </SettingsFile>

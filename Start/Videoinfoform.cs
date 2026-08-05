@@ -1,4 +1,4 @@
-﻿using GMTFV.Properties;
+using GMTFV.Properties;
 using GMTFV.tools;
 using System;
 using System.Collections.Generic;
@@ -148,54 +148,13 @@ namespace GMTFV.Start {
                 throw new Exception("yt-dlp.exe를 찾을 수 없습니다.");
             }
 
-            ProcessStartInfo startInfo = new ProcessStartInfo {
-                FileName = ytdlpPath,
-                Arguments = $"--dump-json --skip-download \"{url}\"",
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                StandardOutputEncoding = Encoding.UTF8
-            };
-
-            Process process = null;
             try {
-                process = new Process { StartInfo = startInfo };
-                StringBuilder output = new StringBuilder();
-                StringBuilder error = new StringBuilder();
+                string jsonOutput = await YtDlpTool.RunYtDlpCommandAsync(
+                    ytdlpPath,
+                    $"--dump-json --skip-download \"{url}\"",
+                    timeout: 30,
+                    cancellationToken: cancellationToken);
 
-                process.OutputDataReceived += (sender, e) => {
-                    if (!string.IsNullOrEmpty(e.Data)) {
-                        output.AppendLine(e.Data);
-                    }
-                };
-
-                process.ErrorDataReceived += (sender, e) => {
-                    if (!string.IsNullOrEmpty(e.Data)) {
-                        error.AppendLine(e.Data);
-                    }
-                };
-
-                process.Start();
-                process.BeginOutputReadLine();
-                process.BeginErrorReadLine();
-
-                await Task.Run(() => {
-                    while (!process.WaitForExit(1000)) {
-                        if (cancellationToken.IsCancellationRequested) {
-                            try {
-                                process.Kill();
-                            } catch { }
-                            throw new OperationCanceledException();
-                        }
-                    }
-                }, cancellationToken);
-
-                if (process.ExitCode != 0) {
-                    throw new Exception($"yt-dlp 오류: {error.ToString()}");
-                }
-
-                string jsonOutput = output.ToString();
                 if (string.IsNullOrWhiteSpace(jsonOutput)) {
                     return subtitles;
                 }
@@ -252,8 +211,8 @@ namespace GMTFV.Start {
                 }
             } catch (OperationCanceledException) {
                 throw;
-            } finally {
-                process?.Dispose();
+            } catch (Exception ex) {
+                Console.WriteLine($"자막 정보 가져오기 실패: {ex.Message}");
             }
 
             return subtitles;
@@ -419,84 +378,39 @@ namespace GMTFV.Start {
                 Path.GetFileNameWithoutExtension(outputPath)
             );
 
-            ProcessStartInfo startInfo = new ProcessStartInfo {
-                FileName = ytdlpPath,
-                Arguments = $"--write-sub --sub-lang {languageCode} --skip-download --sub-format srt --convert-subs srt -o \"{outputTemplate}.%(ext)s\" \"{url}\"",
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                StandardOutputEncoding = Encoding.UTF8
-            };
+            string arguments = $"--write-sub --sub-lang {languageCode} --skip-download --sub-format srt --convert-subs srt -o \"{outputTemplate}.%(ext)s\" \"{url}\"";
 
-            Process process = null;
             try {
-                process = new Process { StartInfo = startInfo };
-                StringBuilder output = new StringBuilder();
-                StringBuilder error = new StringBuilder();
-
-                process.OutputDataReceived += (sender, e) => {
-                    if (!string.IsNullOrEmpty(e.Data)) {
-                        output.AppendLine(e.Data);
-                        Console.WriteLine(e.Data);
-                    }
-                };
-
-                process.ErrorDataReceived += (sender, e) => {
-                    if (!string.IsNullOrEmpty(e.Data)) {
-                        error.AppendLine(e.Data);
-                        Console.WriteLine($"ERROR: {e.Data}");
-                    }
-                };
-
-                process.Start();
-                process.BeginOutputReadLine();
-                process.BeginErrorReadLine();
-
-                await Task.Run(() => {
-                    while (!process.WaitForExit(1000)) {
-                        if (cancellationToken.IsCancellationRequested) {
-                            try {
-                                process.Kill();
-                            } catch { }
-                            throw new OperationCanceledException();
-                        }
-                    }
-                }, cancellationToken);
-
-                if (process.ExitCode != 0) {
-                    string errorMsg = error.ToString();
-                    if (errorMsg.Contains("not available")) {
-                        throw new Exception("해당 언어의 자막을 사용할 수 없습니다.");
-                    } else {
-                        throw new Exception($"자막 다운로드 실패: {errorMsg}");
-                    }
-                }
-
-                // yt-dlp가 생성한 파일 찾기
-                string[] possibleFiles = new string[] {
-                    $"{outputTemplate}.{languageCode}.srt",
-                    $"{outputTemplate}.srt",
-                    outputPath
-                };
-
-                string actualFile = possibleFiles.FirstOrDefault(f => File.Exists(f));
-
-                if (actualFile == null) {
-                    throw new Exception("자막 파일을 찾을 수 없습니다.");
-                }
-
-                // 원하는 파일명으로 이동
-                if (actualFile != outputPath && File.Exists(actualFile)) {
-                    if (File.Exists(outputPath)) {
-                        File.Delete(outputPath);
-                    }
-                    File.Move(actualFile, outputPath);
-                }
+                await YtDlpTool.RunYtDlpCommandAsync(ytdlpPath, arguments, timeout: 60, cancellationToken: cancellationToken);
             } catch (OperationCanceledException) {
                 throw;
-            } finally {
-                process?.Dispose();
+            } catch (Exception ex) {
+                if (ex.Message.Contains("not available")) {
+                    throw new Exception("해당 언어의 자막을 사용할 수 없습니다.");
+                } else {
+                    throw new Exception($"자막 다운로드 실패: {ex.Message}");
+                }
+            }
+
+            // yt-dlp가 생성한 파일 찾기
+            string[] possibleFiles = new string[] {
+                $"{outputTemplate}.{languageCode}.srt",
+                $"{outputTemplate}.srt",
+                outputPath
+            };
+
+            string actualFile = possibleFiles.FirstOrDefault(f => File.Exists(f));
+
+            if (actualFile == null) {
+                throw new Exception("자막 파일을 찾을 수 없습니다.");
+            }
+
+            // 원하는 파일명으로 이동
+            if (actualFile != outputPath && File.Exists(actualFile)) {
+                if (File.Exists(outputPath)) {
+                    File.Delete(outputPath);
+                }
+                File.Move(actualFile, outputPath);
             }
         }
 

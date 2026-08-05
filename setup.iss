@@ -5,7 +5,7 @@
 ; ============================================================================
 
 #define MyAppName "GMTFV"
-#define MyAppVersion "3.3.0.0"
+#define MyAppVersion "3.4.0.0"
 #define MyAppPublisher "Ji Beak min(tharu8813)"
 #define MyAppCopyright "© 2024-2026 Ji Beak min(tharu8813). All rights reserved."
 #define MyAppURL "https://github.com/tharu8813/Give-me-the-f-cking-video"

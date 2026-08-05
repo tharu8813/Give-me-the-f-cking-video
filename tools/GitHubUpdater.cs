@@ -1,4 +1,4 @@
-﻿using GMTFV.tools;
+using GMTFV.tools;
 using Newtonsoft.Json.Linq;
 using System;
 using System.IO;
@@ -18,8 +18,7 @@ public static class GitHubUpdater {
             progressBar.Value = 0;
             statusLabel.Text = "GitHub 릴리즈 확인 중...";
 
-            using (HttpClient client = new HttpClient()) {
-                client.DefaultRequestHeaders.UserAgent.ParseAdd("WinForms-Updater");
+            HttpClient client = Tol.SharedHttpClient;
 
                 string apiUrl = $"https://api.github.com/repos/{owner}/{repo}/releases/latest";
                 string json = await client.GetStringAsync(apiUrl);
@@ -58,8 +57,6 @@ public static class GitHubUpdater {
                            name.EndsWith(".exe");
                 });
 
-
-                var tamp = asset.FirstOrDefault();
                 if (asset == null) {
                     Tol.ShowError("릴리즈 파일이 없습니다.");
                     return;
@@ -102,7 +99,6 @@ public static class GitHubUpdater {
 
                 System.Diagnostics.Process.Start(savePath);
                 Application.Exit();
-            }
         } catch (Exception ex) {
             statusLabel.Text = "업데이트 실패";
             Tol.ShowError("업데이트 중 오류가 발생했습니다:\n" + ex.Message);
