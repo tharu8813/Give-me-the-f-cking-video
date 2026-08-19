@@ -39,25 +39,7 @@ namespace GMTFV.tools {
                 _activeProcesses.Clear();
             }
 
-            // 시스템 레벨의 잔류 프로세스도 확실히 종결
-            KillProcessesByName("yt-dlp");
-            KillProcessesByName("ffmpeg");
         }
 
-        public static void KillProcessesByName(string processName) {
-            try {
-                Process[] processes = Process.GetProcessesByName(processName);
-                foreach (Process process in processes) {
-                    try {
-                        if (!process.HasExited) {
-                            process.Kill();
-                            process.WaitForExit(1000);
-                        }
-                    } catch { } finally {
-                        process.Dispose();
-                    }
-                }
-            } catch { }
-        }
     }
 }

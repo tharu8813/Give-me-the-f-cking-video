@@ -6,6 +6,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using GMTFV.services;
 
 public static class GitHubUpdater {
     public static async Task CheckAndUpdateAsync(
@@ -65,6 +66,12 @@ public static class GitHubUpdater {
                 string downloadUrl = asset["browser_download_url"].ToString();
                 string fileName = asset["name"].ToString();
                 string savePath = Path.Combine(Tol.AppdataPath, fileName);
+                string checksum = asset["digest"]?.ToString();
+
+                if (string.IsNullOrWhiteSpace(checksum)) {
+                    Tol.ShowError("이 릴리즈는 SHA-256 체크섬을 제공하지 않아 보안상 업데이트를 중단했습니다.");
+                    return;
+                }
 
                 statusLabel.Text = "다운로드 중...";
                 progressBar.Value = 0;
@@ -93,6 +100,8 @@ public static class GitHubUpdater {
                         }
                     }
                 }
+
+                FileIntegrityVerifier.VerifySha256(savePath, checksum);
 
                 progressBar.Value = 100;
                 statusLabel.Text = "다운로드 완료! 실행중...";

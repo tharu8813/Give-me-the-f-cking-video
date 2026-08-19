@@ -3,6 +3,8 @@ using System.Drawing;
 using System.Threading;
 using System.Windows.Forms;
 
+using GMTFV.services;
+
 namespace GMTFV.Start {
     /// <summary>
     /// 목록 불러오기 중 부모 폼 중앙에 표시되는 모달 팝업 창
@@ -11,6 +13,7 @@ namespace GMTFV.Start {
         private Label lblStatus;
         private ProgressBar progressBar;
         private Button btnCancel;
+        private Label titleLabel;
         public CancellationTokenSource Cts { get; } = new CancellationTokenSource();
 
         public ImportProgressForm(int totalCount) {
@@ -34,23 +37,32 @@ namespace GMTFV.Start {
 
         private void InitializeComponent(int totalCount) {
             this.Text = "목록 불러오기";
-            this.Size = new Size(440, 185);
+            this.Size = new Size(460, 210);
             this.ControlBox = false; // 상단 X 닫기 버튼 제거로 무단 닫기 방지
             this.FormBorderStyle = FormBorderStyle.FixedDialog;
             this.MaximizeBox = false;
             this.MinimizeBox = false;
             this.ShowInTaskbar = false;
+            this.BackColor = FormTheme.Surface;
+
+            titleLabel = new Label {
+                Location = new Point(24, 18),
+                Size = new Size(400, 26),
+                Text = "목록을 준비하고 있어요",
+                Font = new Font("맑은 고딕", 13F, FontStyle.Bold),
+                ForeColor = FormTheme.Text
+            };
 
             lblStatus = new Label {
-                Location = new Point(20, 15),
-                Size = new Size(385, 42),
+                Location = new Point(24, 52),
+                Size = new Size(400, 42),
                 Text = $"📥 영상 정보 분석 중... (0/{totalCount})",
                 Font = new Font("맑은 고딕", 9.5F, FontStyle.Regular)
             };
 
             progressBar = new ProgressBar {
-                Location = new Point(20, 62),
-                Size = new Size(385, 22),
+                Location = new Point(24, 100),
+                Size = new Size(400, 18),
                 Minimum = 0,
                 Maximum = Math.Max(totalCount, 1),
                 Value = 0,
@@ -58,9 +70,9 @@ namespace GMTFV.Start {
             };
 
             btnCancel = new Button {
-                Location = new Point(155, 98),
-                Size = new Size(120, 34),
-                Text = "⏹ 취소",
+                Location = new Point(160, 138),
+                Size = new Size(140, 36),
+                Text = "가져오기 취소",
                 BackColor = Color.FromArgb(231, 76, 60),
                 ForeColor = Color.White,
                 FlatStyle = FlatStyle.Flat,
@@ -72,6 +84,9 @@ namespace GMTFV.Start {
                 btnCancel.Enabled = false;
             };
 
+            FormTheme.DangerButton(btnCancel);
+
+            this.Controls.Add(titleLabel);
             this.Controls.Add(lblStatus);
             this.Controls.Add(progressBar);
             this.Controls.Add(btnCancel);

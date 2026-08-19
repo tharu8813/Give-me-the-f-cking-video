@@ -11,6 +11,8 @@
     <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion>
     <FileAlignment>512</FileAlignment>
     <AutoGenerateBindingRedirects>true</AutoGenerateBindingRedirects>
+    <!-- MSBuild 17+에서 WinForms .resx의 이미지/아이콘을 처리하기 위한 호환성 설정 -->
+    <GenerateResourceUsePreserializedResources>true</GenerateResourceUsePreserializedResources>
     <Deterministic>true</Deterministic>
     <NuGetPackageImportStamp>
     </NuGetPackageImportStamp>
@@ -105,6 +107,9 @@
     <Reference Include="System.Runtime.CompilerServices.Unsafe, Version=6.0.3.0, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
       <HintPath>packages\System.Runtime.CompilerServices.Unsafe.6.1.2\lib\net462\System.Runtime.CompilerServices.Unsafe.dll</HintPath>
     </Reference>
+    <Reference Include="System.Resources.Extensions, Version=6.0.0.0, Culture=neutral, PublicKeyToken=cc7b13ffcd2ddd51, processorArchitecture=MSIL">
+      <HintPath>packages\System.Resources.Extensions.6.0.0\lib\net461\System.Resources.Extensions.dll</HintPath>
+    </Reference>
     <Reference Include="System.Text.Encoding.CodePages, Version=10.0.0.10, Culture=neutral, PublicKeyToken=b03f5f7f11d50a3a, processorArchitecture=MSIL">
       <HintPath>packages\System.Text.Encoding.CodePages.10.0.10\lib\net462\System.Text.Encoding.CodePages.dll</HintPath>
     </Reference>
@@ -179,6 +184,13 @@
     <Compile Include="tools\VideoInfo.cs" />
     <Compile Include="tools\VideoQuality.cs" />
     <Compile Include="tools\YtDlpTool.cs" />
+    <Compile Include="services\FileNameTemplate.cs" />
+    <Compile Include="services\DownloadQueueService.cs" />
+    <Compile Include="services\ChromeTabImportService.cs" />
+    <Compile Include="services\FileIntegrityVerifier.cs" />
+    <Compile Include="services\FormTheme.cs" />
+    <Compile Include="services\VideoMetadataService.cs" />
+    <Compile Include="services\YtDlpDownloadCommandFactory.cs" />
     <EmbeddedResource Include="DevForm.resx">
       <DependentUpon>DevForm.cs</DependentUpon>
     </EmbeddedResource>
@@ -216,6 +228,9 @@
       <DesignTimeSharedInput>True</DesignTimeSharedInput>
     </Compile>
     <None Include="README.md" />
+    <Content Include="chrome-extension\manifest.json"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
+    <Content Include="chrome-extension\popup.html"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
+    <Content Include="chrome-extension\popup.js"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />

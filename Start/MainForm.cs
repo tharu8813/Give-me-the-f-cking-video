@@ -1,5 +1,6 @@
 using GMTFV.models;
 using GMTFV.Properties;
+using GMTFV.services;
 using GMTFV.tools;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Linq;
@@ -28,36 +29,226 @@ namespace GMTFV.Start {
        private Dictionary<string, DownloadStatus> downloadStatusMap = new Dictionary<string, DownloadStatus>();
 
        private readonly SemaphoreSlim loadingSemaphore = new SemaphoreSlim(3, 3);
-       private SemaphoreSlim downloadSemaphore;  // 동시 다운로드 수 제한용
-       private HttpClient httpClient;
+       private DownloadQueueService downloadQueue;
+       private readonly VideoMetadataService videoMetadataService = new VideoMetadataService();
+       private readonly ChromeTabImportService chromeTabImportService = new ChromeTabImportService();
+       private readonly Button chromeTabsButton = new Button();
+       private bool isChromeTabImportAvailable;
 
-       private bool isClosing = false;
-       private readonly DownloadProcessTracker processTracker = new DownloadProcessTracker();
+        private bool isClosing = false;
+        private readonly DownloadProcessTracker processTracker = new DownloadProcessTracker();
+        private readonly Label emptyStateLabel = new Label();
+        private readonly Dictionary<Button, Color> buttonBaseColors = new Dictionary<Button, Color>();
 
        // 동적 프로그레스 바 관리용
        private List<ProgressBar> dynamicProgressBars = new List<ProgressBar>();
        private List<System.Windows.Forms.Label> dynamicStatusLabels = new List<System.Windows.Forms.Label>();
 
-       public enum DownloadStatus {
-           None,
-           Success,
-           Failed
-       }
+        public enum DownloadStatus {
+            None,
+            Success,
+            Failed
+        }
+
+        private enum DownloadPhase {
+            Video,
+            Audio,
+            Merging,
+            Processing,
+            Finishing,
+            Completed,
+            Downloading
+        }
 
         public MainForm() {
             InitializeComponent();
-            InitializeHttpClient();
+            ApplyUserExperience();
+            chromeTabImportService.TabsReceived += ChromeTabImportService_TabsReceived;
+            isChromeTabImportAvailable = chromeTabImportService.Start();
         }
 
-        private void InitializeHttpClient() {
+        /// <summary>메인 화면의 시각적 위계와 빈 목록 안내를 한 곳에서 관리합니다.</summary>
+        private void ApplyUserExperience() {
+            BackColor = Color.FromArgb(248, 250, 252);
+            headerPanel.BackColor = Color.FromArgb(15, 23, 42);
+            panel1.BackColor = Color.FromArgb(241, 245, 249);
+            panel2.BackColor = BackColor;
+            panel3.BackColor = Color.FromArgb(241, 245, 249);
+
+            label1.Text = "GMTFV";
+            label3.Text = "YouTube 영상과 오디오를 깔끔하게 저장하세요";
+            dragDropLabel.Text = "URL·목록 파일을 끌어 놓거나, Chrome 탭을 한 번에 가져올 수 있어요.";
+            label8.Text = "준비됨 · URL을 추가해 다운로드 목록을 만들어 보세요";
+
+            ConfigureButton(button1, Color.FromArgb(51, 65, 85), Color.White, "저장 형식, 폴더, 동시 다운로드 설정");
+            ConfigureButton(button2, Color.FromArgb(37, 99, 235), Color.White, "YouTube URL을 추가합니다");
+            ConfigureButton(button3, Color.FromArgb(248, 250, 252), Color.FromArgb(185, 28, 28), "선택한 항목을 목록에서 제거합니다");
+            button3.FlatAppearance.BorderSize = 1;
+            button3.FlatAppearance.BorderColor = Color.FromArgb(254, 202, 202);
+            ConfigureButton(button4, Color.FromArgb(15, 118, 110), Color.White, "목록의 영상을 다운로드합니다");
+            ConfigureChromeTabsButton();
+
+            dataGridView1.BackgroundColor = Color.White;
+            dataGridView1.GridColor = Color.FromArgb(226, 232, 240);
+            dataGridView1.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(30, 41, 59);
+            dataGridView1.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
+            dataGridView1.ColumnHeadersDefaultCellStyle.Padding = new Padding(8, 6, 8, 6);
+            dataGridView1.DefaultCellStyle.SelectionBackColor = Color.FromArgb(219, 234, 254);
+            dataGridView1.DefaultCellStyle.SelectionForeColor = Color.FromArgb(15, 23, 42);
+            dataGridView1.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(248, 250, 252);
+            dataGridView1.RowTemplate.Height = 84;
+
+            emptyStateLabel.Text = "아직 다운로드 목록이 비어 있습니다\n\nURL 추가 · Chrome 탭 가져오기 · 드래그 앤 드롭 중 편한 방법을 선택하세요.";
+            emptyStateLabel.Font = new Font("맑은 고딕", 10.5F);
+            emptyStateLabel.ForeColor = Color.FromArgb(100, 116, 139);
+            emptyStateLabel.TextAlign = ContentAlignment.MiddleCenter;
+            emptyStateLabel.Cursor = Cursors.Hand;
+            emptyStateLabel.AllowDrop = true;
+            emptyStateLabel.BackColor = Color.White;
+            emptyStateLabel.BorderStyle = BorderStyle.FixedSingle;
+            emptyStateLabel.Click += (_, __) => button2.PerformClick();
+            emptyStateLabel.DragEnter += dataGridView1_DragEnter;
+            emptyStateLabel.DragLeave += dataGridView1_DragLeave;
+            emptyStateLabel.DragDrop += dataGridView1_DragDrop;
+            panel2.Controls.Add(emptyStateLabel);
+
+            dataGridView1.RowsAdded += (_, __) => RefreshEmptyState();
+            dataGridView1.RowsRemoved += (_, __) => RefreshEmptyState();
+            panel2.Resize += (_, __) => RefreshEmptyState();
+            KeyPreview = true;
+            KeyDown += MainForm_KeyDown;
+            RefreshEmptyState();
+        }
+
+        private void ConfigureChromeTabsButton() {
+            chromeTabsButton.Text = "◉ Chrome 탭";
+            chromeTabsButton.Dock = DockStyle.Right;
+            chromeTabsButton.Width = 130;
+            chromeTabsButton.Cursor = Cursors.Hand;
+            chromeTabsButton.Font = new Font("맑은 고딕", 9.5F, FontStyle.Bold);
+            ConfigureButton(chromeTabsButton, Color.FromArgb(67, 56, 202), Color.White, "열린 YouTube 탭을 한 번에 추가합니다");
+            chromeTabsButton.Click += ChromeTabsButton_Click;
+            panel1.Controls.Add(chromeTabsButton);
+            panel1.Controls.SetChildIndex(chromeTabsButton, 0);
+        }
+
+        private void ChromeTabsButton_Click(object sender, EventArgs e) {
+            if (!isChromeTabImportAvailable) {
+                MessageBox.Show("Chrome 탭 가져오기 통신 포트(43128)를 사용할 수 없습니다. 다른 GMTFV 창 또는 해당 포트를 사용 중인 프로그램을 종료한 뒤 다시 실행해 주세요.", "Chrome 탭 가져오기", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
+            }
+            const string chromeExtensionsUrl = "chrome://extensions/";
+            try { Clipboard.SetText(chromeExtensionsUrl); } catch { }
+            string extensionPath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "chrome-extension");
+            if (Directory.Exists(extensionPath)) {
+                try { Process.Start("explorer.exe", extensionPath); } catch { }
+            }
+            MessageBox.Show("Chrome 확장 관리 주소가 클립보드에 복사되었습니다.\nChrome 주소창에서 Ctrl+V를 눌러 바로 이동하세요.\n\n처음 한 번만 설치하세요.\n1. chrome://extensions/ 페이지에서 우측 상단의 개발자 모드를 켭니다.\n2. '압축해제된 확장 프로그램을 로드합니다'를 누릅니다.\n3. 방금 열린 chrome-extension 폴더를 선택합니다.\n\n설치 후 Chrome 툴바의 GMTFV 확장 아이콘에서 'YouTube 탭 가져오기'를 누르세요.", "Chrome 탭 가져오기", MessageBoxButtons.OK, MessageBoxIcon.Information);
+        }
+
+        private async void ChromeTabImportService_TabsReceived(object sender, IReadOnlyList<string> urls) {
+            if (IsDisposed || isClosing) return;
+            await InvokeAsync(() => label8.Text = $"Chrome에서 {urls.Count}개 YouTube 탭을 받았습니다. 목록에 추가하는 중…");
+            foreach (string url in urls) if (!isClosing) await AddVideoAsync(url);
+            if (!IsDisposed && !isClosing) label8.Text = $"Chrome 탭 {urls.Count}개 가져오기 완료";
+        }
+
+        private async void MainForm_KeyDown(object sender, KeyEventArgs e) {
+            if (e.Control && e.KeyCode == Keys.N) {
+                e.SuppressKeyPress = true;
+                button2.PerformClick();
+                return;
+            }
+
+            if (e.Control && e.KeyCode == Keys.V && Clipboard.ContainsText()) {
+                string url = Clipboard.GetText().Trim();
+                if (Tol.IsYouTubeUrl(url)) {
+                    e.SuppressKeyPress = true;
+                    await AddVideoAsync(url);
+                }
+            }
+        }
+
+        private void ConfigureButton(Button button, Color background, Color foreground, string tooltip) {
+            buttonBaseColors[button] = background;
+            button.BackColor = background;
+            button.ForeColor = foreground;
+            button.FlatStyle = FlatStyle.Flat;
+            button.Cursor = Cursors.Hand;
+            toolTip1.SetToolTip(button, tooltip);
+        }
+
+        private void RefreshEmptyState() {
+            if (emptyStateLabel.IsDisposed) return;
+
+            bool isEmpty = dataGridView1.Rows.Count == 0;
+            emptyStateLabel.Visible = isEmpty;
+            if (isEmpty) {
+                emptyStateLabel.Size = new Size(Math.Min(420, Math.Max(260, panel2.ClientSize.Width - 80)), 116);
+                emptyStateLabel.Location = new Point(
+                    Math.Max(20, (panel2.ClientSize.Width - emptyStateLabel.Width) / 2),
+                    Math.Max(30, (panel2.ClientSize.Height - emptyStateLabel.Height) / 2));
+                emptyStateLabel.BringToFront();
+            }
+        }
+
+        private static string GetPhaseIndicator(DownloadPhase phase) {
+            const string video = "① 영상";
+            const string audio = "② 오디오";
+            const string merge = "③ 병합";
+            const string process = "④ 변환";
+            const string finish = "⑤ 완료";
+
+            switch (phase) {
+                case DownloadPhase.Video: return $"[{video}] → {audio} → {merge} → {process} → {finish}";
+                case DownloadPhase.Audio: return $"{video} → [{audio}] → {merge} → {process} → {finish}";
+                case DownloadPhase.Merging: return $"{video} → {audio} → [{merge}] → {process} → {finish}";
+                case DownloadPhase.Processing: return $"{video} → {audio} → {merge} → [{process}] → {finish}";
+                case DownloadPhase.Finishing: return $"{video} → {audio} → {merge} → {process} → [{finish}]";
+                case DownloadPhase.Completed: return $"{video} → {audio} → {merge} → {process} → [✓ 완료]";
+                default: return $"[{video}/{audio}] → {merge} → {process} → {finish}";
+            }
+        }
+
+        private static bool TryGetFfmpegProgressPercent(string line, TimeSpan duration, out int percent) {
+            percent = 0;
+            if (duration <= TimeSpan.Zero || string.IsNullOrWhiteSpace(line)) return false;
+
+            string[] parts = line.Split(new[] { '=' }, 2);
+            if (parts.Length != 2 || (parts[0] != "out_time_ms" && parts[0] != "out_time_us")) return false;
+            if (!long.TryParse(parts[1], out long rawTime) || rawTime < 0) return false;
+
+            // FFmpeg 버전별 out_time_ms의 밀리초/마이크로초 표기 차이를 모두 처리합니다.
+            double elapsedSeconds = parts[0] == "out_time_us" || rawTime > duration.TotalMilliseconds * 10
+                ? rawTime / 1000000d
+                : rawTime / 1000d;
+            percent = Math.Min(100, Math.Max(0, (int)Math.Round(elapsedSeconds / duration.TotalSeconds * 100)));
+            return true;
+        }
+
+        private void ReportMergeProgress(int progressBarIndex, int currentFile, int totalFiles, string displayTitle, int mergePercent) {
+            if (isClosing) return;
             try {
-                httpClient?.Dispose();
-                httpClient = new HttpClient {
-                    Timeout = TimeSpan.FromSeconds(10)
+                Action update = () => {
+                    string title = displayTitle ?? "영상";
+                    if (title.Length > 28) title = title.Substring(0, 25) + "...";
+                    int overallPercent = 90 + (mergePercent * 9 / 100);
+                    string message = $"🔗 영상+오디오 병합 중... {mergePercent}%";
+                    string phase = GetPhaseIndicator(DownloadPhase.Merging);
+
+                    if (progressBarIndex >= 0 && progressBarIndex < dynamicProgressBars.Count) {
+                        UpdateDynamicProgressBar(progressBarIndex, overallPercent,
+                            $"{phase}\n{title} · {message}", ProgressBarStyle.Continuous);
+                    } else {
+                        progressBar1.Style = ProgressBarStyle.Continuous;
+                        progressBar1.Value = Math.Min(overallPercent, 99);
+                        label8.Text = $"{phase}\n[{currentFile}/{totalFiles}] {message} · {title}";
+                    }
                 };
-                httpClient.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36");
-            } catch (Exception ex) {
-                Console.WriteLine($"HttpClient 초기화 실패: {ex.Message}");
+
+                if (InvokeRequired) BeginInvoke(update); else update();
+            } catch (ObjectDisposedException) {
+            } catch (InvalidOperationException) {
             }
         }
 
@@ -67,17 +258,12 @@ namespace GMTFV.Start {
                 return;
             }
 
-            string normalizedUrl = url;
+            string normalizedUrl;
             try {
-                string RegexPattern = @"(?:youtube\.com/(?:.*[?&]v=|embed/|shorts/)|youtu\.be/)([A-Za-z0-9_-]{11})";
-                Match match = Regex.Match(url, RegexPattern);
-
-                if (match.Success) {
-                    string videoID = match.Groups[1].Value;
-                    normalizedUrl = $"https://www.youtube.com/watch?v={videoID}";
-                }
+                normalizedUrl = videoMetadataService.NormalizeYouTubeUrl(url);
             } catch (Exception ex) {
-                Console.WriteLine($"URL 정규화 오류: {ex.Message}");
+                MessageBox.Show(ex.Message, "알림", MessageBoxButtons.OK, MessageBoxIcon.Warning);
+                return;
             }
 
             lock (loadingUrlsLock) {
@@ -102,31 +288,17 @@ namespace GMTFV.Start {
                 await loadingSemaphore.WaitAsync();
                 semaphoreAcquired = true;
 
-                string RegexPattern = @"(?:youtube\.com/(?:.*[?&]v=|embed/|shorts/)|youtu\.be/)([A-Za-z0-9_-]{11})";
-                Match match = Regex.Match(url, RegexPattern);
-
-                if (!match.Success) {
-                    throw new Exception("유효한 유튜브 URL이 아닙니다.");
-                }
-
-                string videoID = match.Groups[1].Value;
-                url = $"https://www.youtube.com/watch?v={videoID}";
-
-                lock (allListLock) {
-                    if (AllList.Any(v => v.ID == videoID)) {
-                        throw new Exception("이미 목록에 추가된 영상입니다.");
-                    }
-                }
+                url = normalizedUrl;
 
                 Console.WriteLine("===== AddVideoAsync 시작 =====");
                 Console.WriteLine("입력 URL: " + url);
 
-                cts = new CancellationTokenSource();
+                cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
                 cts.CancelAfter(TimeSpan.FromSeconds(30));
 
                 tempRowIndex = await AddTemporaryRow(url);
 
-                var videoData = await GetVideoInfoWithYtDlp(url, cts.Token);
+                var videoData = await videoMetadataService.GetAsync(url, Tol.AppdataPath, cts.Token);
 
                 if (videoData == null) {
                     throw new Exception("영상 정보를 가져올 수 없습니다.");
@@ -146,7 +318,7 @@ namespace GMTFV.Start {
 
                 Image thumbnailImage = null;
                 try {
-                    thumbnailImage = await DownloadThumbnailAsync(videoData.Id);
+                    thumbnailImage = await videoMetadataService.DownloadThumbnailAsync(videoData.Id, cts.Token);
                 } catch (Exception ex) {
                     Console.WriteLine($"썸네일 다운로드 실패 (계속 진행): {ex.Message}");
                 }
@@ -278,90 +450,6 @@ namespace GMTFV.Start {
             }
         }
 
-        private async Task<YtDlpVideoData> GetVideoInfoWithYtDlp(string url, CancellationToken cancellationToken) {
-            string ytdlpPath = Path.Combine(Tol.AppdataPath, "yt-dlp.exe");
-
-            if (!File.Exists(ytdlpPath)) {
-                throw new Exception("yt-dlp.exe를 찾을 수 없습니다. 설정에서 다운로드해주세요.");
-            }
-
-            try {
-                string jsonOutput = await YtDlpTool.GetVideoInfoJsonAsync(ytdlpPath, url, cancellationToken);
-                if (string.IsNullOrWhiteSpace(jsonOutput)) {
-                    throw new Exception("yt-dlp에서 데이터를 받지 못했습니다.");
-                }
-
-                return ParseYtDlpJson(jsonOutput);
-            } catch (OperationCanceledException) {
-                throw;
-            } catch (Exception ex) when (!(ex is OperationCanceledException)) {
-                string errorMsg = ex.Message;
-                if (errorMsg.Contains("Video unavailable")) {
-                    throw new Exception("영상을 사용할 수 없습니다. (비공개 또는 삭제됨)");
-                } else if (errorMsg.Contains("Private video")) {
-                    throw new Exception("비공개 영상입니다.");
-                } else if (errorMsg.Contains("age")) {
-                    throw new Exception("연령 제한이 있는 영상입니다.");
-                } else {
-                    throw new Exception($"영상 정보 가져오기 실패: {errorMsg}", ex);
-                }
-            }
-        }
-
-        private YtDlpVideoData ParseYtDlpJson(string json) {
-            try {
-                JObject data = JObject.Parse(json);
-
-                var videoData = new YtDlpVideoData {
-                    Title = data["title"]?.ToString() ?? "제목 없음",
-                    Id = data["id"]?.ToString() ?? Guid.NewGuid().ToString(),
-                    Uploader = data["uploader"]?.ToString() ?? data["channel"]?.ToString() ?? "알 수 없음",
-                    Duration = TimeSpan.FromSeconds(data["duration"]?.ToObject<double>() ?? 0),
-                    Formats = new List<YtDlpFormat>()
-                };
-
-                // 업로드 날짜 파싱
-                string uploadDateStr = data["upload_date"]?.ToString();
-                if (!string.IsNullOrEmpty(uploadDateStr) && uploadDateStr.Length == 8) {
-                    try {
-                        int year = int.Parse(uploadDateStr.Substring(0, 4));
-                        int month = int.Parse(uploadDateStr.Substring(4, 2));
-                        int day = int.Parse(uploadDateStr.Substring(6, 2));
-                        videoData.UploadDate = new DateTime(year, month, day);
-                    } catch {
-                        videoData.UploadDate = DateTime.Now;
-                    }
-                } else {
-                    videoData.UploadDate = DateTime.Now;
-                }
-
-                // 포맷 정보 파싱
-                JArray formats = data["formats"] as JArray;
-                if (formats != null) {
-                    foreach (JObject format in formats) {
-                        try {
-                            var formatData = new YtDlpFormat {
-                                FormatId = format["format_id"]?.ToString(),
-                                Height = format["height"]?.ToObject<int?>(),
-                                Fps = format["fps"]?.ToObject<int?>(),
-                                Vcodec = format["vcodec"]?.ToString(),
-                                Acodec = format["acodec"]?.ToString(),
-                                Ext = format["ext"]?.ToString()
-                            };
-
-                            videoData.Formats.Add(formatData);
-                        } catch (Exception ex) {
-                            Console.WriteLine($"포맷 파싱 오류 (무시): {ex.Message}");
-                        }
-                    }
-                }
-
-                return videoData;
-            } catch (Exception ex) {
-                throw new Exception($"JSON 파싱 오류: {ex.Message}");
-            }
-        }
-
         private async Task<int> AddTemporaryRow(string url) {
             int rowIndex = -1;
             await InvokeAsync(() => {
@@ -383,38 +471,6 @@ namespace GMTFV.Start {
                 }
             });
             return rowIndex;
-        }
-
-        private async Task<Image> DownloadThumbnailAsync(string videoId) {
-            if (httpClient == null) {
-                InitializeHttpClient();
-            }
-
-            try {
-                Console.WriteLine("썸네일 다운로드 시작...");
-
-                byte[] imageBytes = null;
-                try {
-                    imageBytes = await httpClient.GetByteArrayAsync($"https://i.ytimg.com/vi/{videoId}/maxresdefault.jpg");
-                } catch {
-                    try {
-                        imageBytes = await httpClient.GetByteArrayAsync($"https://i.ytimg.com/vi/{videoId}/0.jpg");
-                    } catch {
-                        Console.WriteLine("기본 썸네일도 다운로드 실패");
-                    }
-                }
-
-                if (imageBytes != null && imageBytes.Length > 0) {
-                    using (MemoryStream ms = new MemoryStream(imageBytes)) {
-                        Image img = System.Drawing.Image.FromStream(ms);
-                        Console.WriteLine("썸네일 다운로드 완료");
-                        return img;
-                    }
-                }
-            } catch (Exception ex) {
-                Console.WriteLine($"썸네일 다운로드 실패: {ex.Message}");
-            }
-            return null;
         }
 
         private async Task UpdateRowWithVideoInfoAsync(int rowIndex, VideoInfo videoInfo, Image thumbnailImage) {
@@ -583,6 +639,7 @@ namespace GMTFV.Start {
             }
 
             CleanupResources();
+            chromeTabImportService.Dispose();
 
             base.OnFormClosing(e);
         }
@@ -614,12 +671,6 @@ namespace GMTFV.Start {
                             Console.WriteLine($"Image 리소스 정리 오류: {ex.Message}");
                         }
                     }
-                }
-
-                try {
-                    httpClient?.Dispose();
-                } catch (Exception ex) {
-                    Console.WriteLine($"HttpClient 정리 오류: {ex.Message}");
                 }
 
                 try {
@@ -926,7 +977,7 @@ namespace GMTFV.Start {
 
             // 동시 다운로드 수 설정
             int maxConcurrent = Settings.Default.MaxConcurrentDownloads;
-            downloadSemaphore = new SemaphoreSlim(maxConcurrent, maxConcurrent);
+            downloadQueue = new DownloadQueueService(maxConcurrent);
 
             // 다운로드 중에는 button4를 제외한 다른 버튼들만 비활성화
             button1.Enabled = false;
@@ -937,7 +988,7 @@ namespace GMTFV.Start {
             // button4를 활성화하고 텍스트/색상 변경 (취소 버튼으로 표시)
             button4.Enabled = true;
             button4.Text = "⏹ 다운로드 취소";
-            button4.BackColor = Color.FromArgb(231, 76, 60);  // 빨강색으로 변경
+            button4.BackColor = Color.FromArgb(220, 38, 38);
             button4.ForeColor = Color.White;
 
             button4.Refresh();  // 화면 갱신
@@ -961,12 +1012,6 @@ namespace GMTFV.Start {
 
                 // 동시 다운로드 구현: Task 목록으로 병렬 다운로드
                 var downloadTasks = new List<Task>();
-                var progressBarQueue = new Queue<int>();  // 사용 가능한 프로그래스바 인덱스 큐
-
-                for (int i = 0; i < maxConcurrent; i++) {
-                    progressBarQueue.Enqueue(i);
-                }
-
                 foreach (VideoInfo videoInfo in AllList.ToList()) {
                     if (downloadCancellationTokenSource.Token.IsCancellationRequested) {
                         MessageBox.Show("다운로드가 취소되었습니다. 현재까지 다운로드한 영상은 유지됩니다.", "알림", MessageBoxButtons.OK, MessageBoxIcon.Asterisk);
@@ -977,15 +1022,7 @@ namespace GMTFV.Start {
 
                     // 각 비디오마다 Task 생성하여 동시 다운로드 시작
                     Task downloadTask = Task.Run(async () => {
-                        // Semaphore로 동시 실행 수 제한
-                        await downloadSemaphore.WaitAsync(downloadCancellationTokenSource.Token);
-
-                        int barIndex = -1;
-                        lock (progressBarQueue) {
-                            if (progressBarQueue.Count > 0) {
-                                barIndex = progressBarQueue.Dequeue();
-                            }
-                        }
+                        int barIndex = await downloadQueue.AcquireSlotAsync(downloadCancellationTokenSource.Token);
 
                         try {
                             int currentRowIndex = -1;
@@ -1022,7 +1059,10 @@ namespace GMTFV.Start {
                                 }
 
                                 // 설정의 파일명 템플릿을 적용하여 파일명 생성 (목록 순번 반영)
-                                string fileName = BuildFileName(videoInfo, fileNumber);
+                                string fileName = FileNameTemplate.Build(
+                                    videoInfo,
+                                    Settings.Default.FileNameTemplate,
+                                    fileNumber);
                                 string videoFile = Path.Combine(savePath, fileName);
 
                                 // Windows 경로 최대 길이(260) 초과 시 단축
@@ -1106,12 +1146,7 @@ namespace GMTFV.Start {
                                 }
                             }
                         } finally {
-                            if (barIndex >= 0) {
-                                lock (progressBarQueue) {
-                                    progressBarQueue.Enqueue(barIndex);
-                                }
-                            }
-                            downloadSemaphore.Release();
+                            downloadQueue.ReleaseSlot(barIndex);
                         }
                     }, downloadCancellationTokenSource.Token);
 
@@ -1158,8 +1193,8 @@ namespace GMTFV.Start {
                 isDownloading = false;
                 try { downloadCancellationTokenSource?.Dispose(); } catch { }
                 downloadCancellationTokenSource = null;
-                try { downloadSemaphore?.Dispose(); } catch { }
-                downloadSemaphore = null;
+                try { downloadQueue?.Dispose(); } catch { }
+                downloadQueue = null;
 
                 // 컨트롤 상태 100% 복원
                 Invoke((Action)(() => {
@@ -1170,7 +1205,7 @@ namespace GMTFV.Start {
 
                     button4.Enabled = true;
                     button4.Text = "⬇️ 다운로드 시작";
-                    button4.BackColor = Color.FromArgb(41, 128, 185);
+                    button4.BackColor = buttonBaseColors[button4];
                     button4.ForeColor = Color.White;
                     button4.Refresh();
                 }));
@@ -1187,74 +1222,14 @@ namespace GMTFV.Start {
                 throw new Exception("yt-dlp.exe를 찾을 수 없습니다.");
             }
 
-            if (string.IsNullOrEmpty(videoInfo.ID)) {
-                throw new Exception("영상 ID가 없습니다.");
-            }
-
-            string url = $"https://www.youtube.com/watch?v={videoInfo.ID}";
-
-            string desiredExtension = videoInfo.TypeSave?.SubType ?? "mp4";
-
-            string formatArg = "";
-            bool useBestQuality = (videoInfo.Tag as string == "USE_BEST_QUALITY");
-
-            if (useBestQuality) {
-                if (videoInfo.TypeSave.IsTypeVideo) {
-                    formatArg = "-f bestvideo+bestaudio/best";
-                } else {
-                    formatArg = "-f bestaudio";
-                }
-            } else {
-                var selectedQuality = videoInfo.VideoQualities.FirstOrDefault(vq => vq.IsSelected);
-                if (selectedQuality != null) {
-                    string height = selectedQuality.Quality.Replace("p", "");
-                    int fps = selectedQuality.Fps;
-
-                    if (videoInfo.TypeSave.IsTypeVideo) {
-                        formatArg = $"-f \"bestvideo[height<={height}][fps<={fps}]+bestaudio/best[height<={height}]\"";
-                    } else {
-                        formatArg = "-f bestaudio";
-                    }
-                } else {
-                    formatArg = "-f best";
-                }
-            }
-
-            string mergeOutputFormat = "";
-            string postProcessArgs = "";
-
-            if (!videoInfo.TypeSave.IsTypeVideo) {
-                string audioExt = videoInfo.TypeSave.SubType.ToLower();
-                // FFmpeg은 -i 옵션 뒤에 입력 파일이 오고, 그 뒤에 인코더 설정을 붙입니다.
-
-                if (audioExt == "mp3") {
-                    // libmp3lame 코덱 사용, -qscale:a 0으로 최상위 음질(V0) 설정
-                    formatArg = "-codec:a libmp3lame -qscale:a 0";
-                } else if (audioExt == "m4a") {
-                    // m4a의 경우 보통 원본 코덱(AAC)을 그대로 복사하는 것이 손실이 전혀 없습니다.
-                    formatArg = "-codec:a copy";
-                } else if (audioExt == "wav") {
-                    // wav는 비압축 포맷이므로 표준 PCM 인코더 지정
-                    formatArg = "-codec:a pcm_s16le";
-                }
-            } else {
-                mergeOutputFormat = $"--merge-output-format {desiredExtension}";
-
-                if (desiredExtension == "mp4" || desiredExtension == "avi" || desiredExtension == "mov") {
-                    // GPU 가속 및 오디오 비트레이트 동적 적용
-                    int audioBitrate = Settings.Default.AudioBitrate;
-                    string videoEncoder = GetVideoEncoder();
-                    postProcessArgs = $"--postprocessor-args \"ffmpeg:{videoEncoder} -c:a aac -b:a {audioBitrate}k\"";
-                }
-            }
-
-            string ffmpegPath = Path.Combine(Tol.AppdataPath, "ffmpeg.exe");
-            string ffmpegArg = "";
-            if (File.Exists(ffmpegPath)) {
-                ffmpegArg = $"--ffmpeg-location \"{ffmpegPath}\"";
-            }
-
-            string arguments = $"{ffmpegArg} {formatArg} {mergeOutputFormat} {postProcessArgs} --no-playlist --newline -o \"{outputPath}\" \"{url}\"".Trim();
+            YtDlpDownloadCommand command = YtDlpDownloadCommandFactory.Create(
+                videoInfo,
+                outputPath,
+                Tol.AppdataPath,
+                GetVideoEncoder(),
+                Settings.Default.AudioBitrate);
+            string desiredExtension = command.DesiredExtension;
+            string arguments = command.Arguments;
 
             Console.WriteLine($"[yt-dlp 명령어] {ytdlpPath} {arguments}");
 
@@ -1270,6 +1245,8 @@ namespace GMTFV.Start {
 
             Process process = null;
             DateTime lastUiReportTime = DateTime.MinValue;
+            bool isMerging = false;
+            int lastMergePercent = -1;
 
             try {
                 process = new Process { StartInfo = startInfo };
@@ -1288,6 +1265,7 @@ namespace GMTFV.Start {
                             string statusMessage = "";
                             int? currentPercent = null;
                             ProgressBarStyle statusStyle = ProgressBarStyle.Continuous;
+                            DownloadPhase phase = DownloadPhase.Downloading;
 
                             // 다운로드 속도 파싱 (예: 3.25MiB/s, 500KiB/s)
                             string speedText = "";
@@ -1310,8 +1288,10 @@ namespace GMTFV.Start {
 
                                             if (e.Data.Contains("video") || e.Data.Contains("webm") || e.Data.Contains("mp4")) {
                                                 statusMessage = $"🎬 영상 다운로드 중... {currentPercent}%{speedText}";
+                                                phase = DownloadPhase.Video;
                                             } else if (e.Data.Contains("audio") || e.Data.Contains("m4a") || e.Data.Contains("opus")) {
                                                 statusMessage = $"🎵 오디오 다운로드 중... {currentPercent}%{speedText}";
+                                                phase = DownloadPhase.Audio;
                                             } else {
                                                 statusMessage = $"⬇️ 다운로드 중... {currentPercent}%{speedText}";
                                             }
@@ -1321,9 +1301,11 @@ namespace GMTFV.Start {
                             }
                             // 2. 병합 작업 (Marquee 블록 형태 적용)
                             else if (e.Data.Contains("[Merger]") || e.Data.Contains("Merging formats")) {
+                                isMerging = true;
                                 statusMessage = "🔗 영상+오디오 병합 중...";
                                 currentPercent = 95;
                                 statusStyle = ProgressBarStyle.Marquee;
+                                phase = DownloadPhase.Merging;
                             }
                             // 3. 오디오 변환 (AAC 인코딩 등)
                             else if (e.Data.Contains("[ExtractAudio]") || e.Data.Contains("Destination:") ||
@@ -1331,18 +1313,21 @@ namespace GMTFV.Start {
                                 statusMessage = "🔄 오디오 변환 중...";
                                 currentPercent = 98;
                                 statusStyle = ProgressBarStyle.Marquee;
+                                phase = DownloadPhase.Processing;
                             }
                             // 4. 임시 파일 정리
                             else if (e.Data.Contains("Deleting original file")) {
                                 statusMessage = "🗑️ 임시 파일 정리 중...";
                                 currentPercent = 99;
                                 statusStyle = ProgressBarStyle.Marquee;
+                                phase = DownloadPhase.Finishing;
                             }
                             // 5. 완료
                             else if (e.Data.Contains("has already been downloaded")) {
                                 statusMessage = "✅ 이미 다운로드된 파일";
                                 currentPercent = 100;
                                 statusStyle = ProgressBarStyle.Continuous;
+                                phase = DownloadPhase.Completed;
                             }
 
                             if (!string.IsNullOrEmpty(statusMessage) && !isClosing) {
@@ -1354,7 +1339,8 @@ namespace GMTFV.Start {
                                     Invoke(new Action(() => {
                                         if (progressBarIndex >= 0 && progressBarIndex < dynamicProgressBars.Count) {
                                             // 동적 프로그레스바 모드: 개별 프로그레스바만 갱신
-                                            UpdateDynamicProgressBar(progressBarIndex, currentPercent ?? 0, $"{statusMessage} - {displayTitle}", statusStyle);
+                                            UpdateDynamicProgressBar(progressBarIndex, currentPercent ?? 0,
+                                                $"{GetPhaseIndicator(phase)}\n{displayTitle} · {statusMessage}", statusStyle);
                                         } else {
                                             // 단일 다운로드 모드: 메인 상단 프로그레스바 갱신
                                             if (statusStyle == ProgressBarStyle.Marquee) {
@@ -1366,7 +1352,7 @@ namespace GMTFV.Start {
                                                     progressBar1.Value = Math.Min(currentPercent.Value, 100);
                                                 }
                                             }
-                                            label8.Text = $"[{currentFile}/{totalFiles}] {statusMessage}\n{displayTitle}";
+                                            label8.Text = $"{GetPhaseIndicator(phase)}\n[{currentFile}/{totalFiles}] {statusMessage} · {displayTitle}";
                                         }
                                     }));
                                 }
@@ -1383,6 +1369,12 @@ namespace GMTFV.Start {
                     if (!string.IsNullOrEmpty(e.Data)) {
                         error.AppendLine(e.Data);
                         Console.WriteLine($"[yt-dlp ERROR] {e.Data}");
+
+                        if (isMerging && TryGetFfmpegProgressPercent(e.Data, videoInfo.VideoLength, out int mergePercent) &&
+                            mergePercent != lastMergePercent) {
+                            lastMergePercent = mergePercent;
+                            ReportMergeProgress(progressBarIndex, currentFile, totalFiles, displayTitle: videoInfo.Title, mergePercent);
+                        }
                     }
                 };
 
@@ -1476,39 +1468,6 @@ namespace GMTFV.Start {
                 processTracker.UnregisterProcess(process);
                 process?.Dispose();
             }
-        }
-
-        /// <summary>
-        /// 설정의 FileNameTemplate을 VideoInfo 데이터로 치환하여 최종 파일명(확장자 포함)을 반환합니다.
-        /// %num%, %no%, %index% 를 통해 목록 순번을 지원합니다.
-        /// %num2%, %num3%를 통해 제로패딩(01, 001 등)을 지원합니다.
-        /// </summary>
-        private static string BuildFileName(VideoInfo v, int listNumber = 1) {
-            string template = Settings.Default.FileNameTemplate;
-            if (string.IsNullOrWhiteSpace(template))
-                template = "%title%_%date%";
-
-            string ext = v.TypeSave?.SubType ?? "mp4";
-
-            string name = template
-                .Replace("%num3%",   listNumber.ToString("D3"))    // 001, 002, ...
-                .Replace("%num2%",   listNumber.ToString("D2"))    // 01, 02, ...
-                .Replace("%num%",    listNumber.ToString())        // 1, 2, ...
-                .Replace("%no%",     listNumber.ToString())
-                .Replace("%index%",  listNumber.ToString())
-                .Replace("%title%",  Tol.SanitizeFileName(v.Title  ?? "untitled"))
-                .Replace("%author%", Tol.SanitizeFileName(v.Author ?? "unknown"))
-                .Replace("%date%",   DateTime.Now.ToString("yyyy-MM-dd"))
-                .Replace("%id%",     v.ID ?? "")
-                .Replace("%ext%",    ext);
-
-            // 치환 결과에 남아있는 금지 문자 최종 제거
-            name = Tol.SanitizeFileName(name);
-
-            if (string.IsNullOrWhiteSpace(name))
-                name = "video";
-
-            return name + "." + ext;
         }
 
         void ToggleControls(bool isEnabled) {
@@ -1682,16 +1641,12 @@ namespace GMTFV.Start {
             try {
                 if (sender is Button btn) {
                     btn.FlatAppearance.BorderSize = 0;
+                    if (btn == button3) btn.FlatAppearance.BorderSize = 1;
 
-                    // 원래 색상으로 복원
-                    if (btn.Name == "button1") {
-                        btn.BackColor = Color.FromArgb(52, 73, 94);
-                    } else if (btn.Name == "button2") {
-                        btn.BackColor = Color.FromArgb(46, 204, 113);
-                    } else if (btn.Name == "button3") {
-                        btn.BackColor = Color.FromArgb(231, 76, 60);
-                    } else if (btn.Name == "button4") {
-                        btn.BackColor = Color.FromArgb(41, 128, 185);
+                    if (btn == button4 && isDownloading) {
+                        btn.BackColor = Color.FromArgb(220, 38, 38);
+                    } else if (buttonBaseColors.TryGetValue(btn, out Color baseColor)) {
+                        btn.BackColor = baseColor;
                     }
                 }
             } catch (Exception ex) {
@@ -1768,7 +1723,7 @@ namespace GMTFV.Start {
                 button2.Dock = DockStyle.None;
 
                 int startY = label8.Bottom + 5;
-                int itemHeight = 45;
+                int itemHeight = 64;
 
                 for (int i = 0; i < count; i++) {
                     int currentTop = startY + (i * itemHeight);
@@ -1791,7 +1746,7 @@ namespace GMTFV.Start {
                         Left = label8.Left,
                         Top = pb.Bottom + 2,
                         Width = progressBar1.Width,
-                        Height = 20,
+                        Height = 40,
                         Text = $"대기중... ({i + 1}/{count})",
                         ForeColor = Color.FromArgb(127, 140, 141),
                         Font = new Font("맑은 고딕", 8.5f),
@@ -2003,22 +1958,4 @@ namespace GMTFV.Start {
         }
     }
 
-    // yt-dlp JSON 파싱용 데이터 클래스
-    public class YtDlpVideoData {
-        public string Title { get; set; }
-        public string Id { get; set; }
-        public string Uploader { get; set; }
-        public DateTime UploadDate { get; set; }
-        public TimeSpan Duration { get; set; }
-        public List<YtDlpFormat> Formats { get; set; }
-    }
-
-    public class YtDlpFormat {
-        public string FormatId { get; set; }
-        public int? Height { get; set; }
-        public int? Fps { get; set; }
-        public string Vcodec { get; set; }
-        public string Acodec { get; set; }
-        public string Ext { get; set; }
-    }
 }

@@ -10,6 +10,7 @@ using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using GMTFV.services;
 
 namespace GMTFV.tools {
     internal static class Tol {
@@ -117,18 +118,17 @@ namespace GMTFV.tools {
                     !Uri.TryCreate("https://" + url, UriKind.Absolute, out uri))
                     return false;
 
-                string host = uri.Host.ToLower();
+                string host = uri.Host.ToLowerInvariant();
 
                 bool isYoutubeDomain =
-                    host.Contains("youtube.com") ||
-                    host.Contains("youtu.be") ||
-                    host.Contains("www.youtube.com");
+                    host == "youtube.com" || host.EndsWith(".youtube.com", StringComparison.Ordinal) ||
+                    host == "youtu.be";
 
                 bool hasValidPath =
                     uri.AbsolutePath.StartsWith("/watch") ||
                     uri.AbsolutePath.StartsWith("/shorts") ||
                     uri.AbsolutePath.StartsWith("/embed") ||
-                    host.Contains("youtu.be");
+                    host == "youtu.be";
 
                 return isYoutubeDomain && hasValidPath;
             } catch (Exception ex) {
@@ -249,6 +249,11 @@ namespace GMTFV.tools {
                         }
                     }
                 }
+
+                await FileIntegrityVerifier.VerifyRemoteSha256Async(
+                    zipPath,
+                    new Uri(downloadUrl + ".sha256"),
+                    Path.GetFileName(new Uri(downloadUrl).AbsolutePath));
 
                 progress?.Report(new FFmpegProgress {
                     Percentage = 0,

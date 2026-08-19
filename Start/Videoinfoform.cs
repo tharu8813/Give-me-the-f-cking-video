@@ -13,6 +13,8 @@ using System.Threading.Tasks;
 using System.Windows.Forms;
 using Newtonsoft.Json.Linq;
 
+using GMTFV.services;
+
 namespace GMTFV.Start {
     public partial class VideoInfoForm : DevForm {
         private readonly VideoInfo videoInfo;
@@ -23,6 +25,18 @@ namespace GMTFV.Start {
 
         public VideoInfoForm(VideoInfo videoInfo) {
             InitializeComponent();
+            FormTheme.Apply(this, headerPanel);
+            FormTheme.PrimaryButton(button1);
+            FormTheme.SecondaryButton(button2);
+            FormTheme.OutlineButton(btnCopyUrl);
+            FormTheme.OutlineButton(btnOpenUrl);
+            FormTheme.OutlineButton(btnClose);
+            headerTitle.Text = "영상 다운로드 옵션";
+            button1.Text = "옵션 저장";
+            button2.Text = "자막 다운로드";
+            btnCopyUrl.Text = "링크 복사";
+            btnOpenUrl.Text = "YouTube에서 열기";
+            btnClose.Text = "닫기";
 
             if (videoInfo == null) {
                 throw new ArgumentNullException(nameof(videoInfo), "VideoInfo는 null일 수 없습니다.");
@@ -36,9 +50,9 @@ namespace GMTFV.Start {
             try {
                 // 기본 정보 표시
                 label1.Text = videoInfo.Title ?? "제목 없음";
-                label2.Text = $"👤 저자: {videoInfo.Author ?? "알 수 없음"}";
-                label3.Text = $"⏱️ 길이: {videoInfo.VideoLength}";
-                label4.Text = $"📅 업로드 일자: {videoInfo.UploadDate:yyyy-MM-dd}";
+                label2.Text = $"채널  ·  {videoInfo.Author ?? "알 수 없음"}";
+                label3.Text = $"재생 시간  ·  {videoInfo.VideoLength}";
+                label4.Text = $"업로드일  ·  {videoInfo.UploadDate:yyyy-MM-dd}";
 
                 if (videoInfo.Image != null) {
                     try {
@@ -498,17 +512,12 @@ namespace GMTFV.Start {
         private void Button_MouseLeave(object sender, EventArgs e) {
             try {
                 if (sender is Button btn) {
-                    // 원래 색상으로 복원
                     if (btn.Name == "button1") {
-                        btn.BackColor = Color.FromArgb(46, 204, 113); // 녹색 - 옵션 저장
+                        btn.BackColor = FormTheme.Primary;
                     } else if (btn.Name == "button2") {
-                        btn.BackColor = Color.FromArgb(155, 89, 182); // 보라색 - 자막 다운로드
-                    } else if (btn.Name == "btnCopyUrl") {
-                        btn.BackColor = Color.FromArgb(52, 152, 219); // 파란색 - URL 복사
-                    } else if (btn.Name == "btnOpenUrl") {
-                        btn.BackColor = Color.FromArgb(230, 126, 34); // 주황색 - URL 열기
-                    } else if (btn.Name == "btnClose") {
-                        btn.BackColor = Color.FromArgb(127, 140, 141); // 회색 - 닫기
+                        btn.BackColor = FormTheme.Secondary;
+                    } else if (btn.Name == "btnCopyUrl" || btn.Name == "btnOpenUrl" || btn.Name == "btnClose") {
+                        btn.BackColor = Color.White;
                     }
                 }
             } catch (Exception ex) {

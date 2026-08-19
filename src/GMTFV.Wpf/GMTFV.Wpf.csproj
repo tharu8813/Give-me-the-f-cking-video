@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <ApplicationIcon>..\..\icon.ico</ApplicationIcon>
+    <AssemblyName>GMTFV</AssemblyName>
+    <RootNamespace>GMTFV.Wpf</RootNamespace>
+  </PropertyGroup>
+  <ItemGroup>
+    <Content Include="..\..\chrome-extension\**\*" Link="chrome-extension\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

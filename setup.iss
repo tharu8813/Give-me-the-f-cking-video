@@ -72,6 +72,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 
 [Tasks]
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "chromeextension"; Description: "Chrome 탭 가져오기 확장 프로그램 폴더 열기"; GroupDescription: "추가 기능"; Flags: checkedonce
 
 [Files]
 Source: "{#SourcePath}\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
@@ -84,6 +85,7 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+Filename: "explorer.exe"; Parameters: "{app}\chrome-extension"; Description: "Chrome 탭 가져오기 확장 프로그램 설치 안내 열기"; Flags: postinstall skipifsilent; Tasks: chromeextension
 
 [UninstallDelete]
 Type: filesandordirs; Name: "{app}"

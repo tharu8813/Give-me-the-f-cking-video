@@ -8,6 +8,8 @@ using System.IO;
 using System.Linq;
 using System.Windows.Forms;
 
+using GMTFV.services;
+
 namespace GMTFV.Start {
     public partial class Setting : GMTFV.DevForm {
 
@@ -32,6 +34,18 @@ namespace GMTFV.Start {
 
         public Setting(List<VideoInfo> existingVideos = null, MainForm mainForm = null) {
             InitializeComponent();
+            FormTheme.Apply(this, headerPanel);
+            FormTheme.PrimaryButton(button2);
+            FormTheme.OutlineButton(button3);
+            FormTheme.OutlineButton(btnExport);
+            FormTheme.OutlineButton(btnImport);
+            FormTheme.OutlineButton(btnReset);
+            headerTitle.Text = "다운로드 설정";
+            tabBasic.Text = "기본";
+            tabAdvanced.Text = "고급";
+            button2.Text = "변경사항 저장";
+            btnExport.Text = "목록 내보내기";
+            btnImport.Text = "목록 불러오기";
             _existingVideos = existingVideos ?? new List<VideoInfo>();
             _mainForm = mainForm;
         }
@@ -406,11 +420,9 @@ namespace GMTFV.Start {
         private void Button_MouseLeave(object sender, EventArgs e) {
             if (sender is Button btn) {
                 if (btn == button2) {
-                    btn.BackColor = Color.FromArgb(46, 204, 113);
-                } else if (btn == button3) {
-                    btn.BackColor = Color.FromArgb(52, 152, 219);
-                } else if (btn == btnReset) {
-                    btn.BackColor = Color.FromArgb(155, 89, 182);
+                    btn.BackColor = FormTheme.Primary;
+                } else if (btn == button3 || btn == btnReset) {
+                    btn.BackColor = Color.White;
                 }
             }
         }

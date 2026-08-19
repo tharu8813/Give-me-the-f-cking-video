@@ -2,12 +2,17 @@
 using System.Text.RegularExpressions;
 using System.Windows.Forms;
 
+using GMTFV.services;
+
 namespace GMTFV.Start {
     public partial class VideoCheckcs : DevForm {
         private readonly string url;
 
         public VideoCheckcs(string url) {
             InitializeComponent();
+            FormTheme.Apply(this);
+            Text = "영상 미리보기";
+            BackColor = FormTheme.Surface;
             this.url = url;
         }
 

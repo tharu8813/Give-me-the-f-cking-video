@@ -5,6 +5,7 @@ using System.Net.Http;
 using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
+using GMTFV.services;
 using static GMTFV.tools.Tol;
 
 namespace GMTFV.tools {
@@ -28,6 +29,8 @@ namespace GMTFV.tools {
         /// <summary>yt-dlp GitHub 최신 릴리즈 다운로드 URL</summary>
         private const string DownloadUrl =
             "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe";
+        private const string ChecksumUrl =
+            "https://github.com/yt-dlp/yt-dlp/releases/latest/download/SHA2-256SUMS";
 
         // ─────────────────────────────────────────────────
         //  Public API
@@ -268,7 +271,7 @@ namespace GMTFV.tools {
                 // ── 24시간이 경과한 경우 업데이트 시도 ──
                 ReportProgress(progress, 0, "yt-dlp 최신 버전 확인 중...");
 
-                bool updated = await UpdateYtDlpIfNeededAsync(ytdlpPath, progress);
+                bool updated = await UpdateYtDlpIfNeededAsync(ytdlpPath, tempPath, progress);
 
                 // 확인 시각 저장
                 GMTFV.Properties.Settings.Default.LastYtDlpUpdateCheck = DateTime.Now;
@@ -310,28 +313,20 @@ namespace GMTFV.tools {
         /// <returns>업데이트가 실제로 수행되었으면 <c>true</c>, 최신 버전이거나 실패하면 <c>false</c>.</returns>
         private static async Task<bool> UpdateYtDlpIfNeededAsync(
             string ytdlpPath,
+            string tempPath,
             IProgress<FFmpegProgress> progress) {
 
             if (!File.Exists(ytdlpPath))
                 return false;
 
             try {
-                ReportProgress(progress, 10, "yt-dlp 업데이트 확인 중...");
-                ReportProgress(progress, 30, "yt-dlp 업데이트 진행 중...");
+                ReportProgress(progress, 10, "yt-dlp 업데이트 확인 및 검증 중...");
+                await DownloadToFileAsync(tempPath, progress);
 
-                string result = await RunYtDlpCommandAsync(
-                    ytdlpPath,
-                    "-U",
-                    timeout: 120);
-
-                Console.WriteLine(result);
-
-                // yt-dlp 출력 메시지로 업데이트 여부 판단
-                bool updated =
-                    result.Contains("Updated yt-dlp") ||
-                    result.Contains("Updating");
-
-                return updated;
+                // 검증된 파일만 기존 실행 파일을 교체합니다.
+                File.Delete(ytdlpPath);
+                File.Move(tempPath, ytdlpPath);
+                return true;
             } catch (Exception ex) {
                 // 업데이트 실패 → 기존 exe 그대로 사용
                 Console.WriteLine($"yt-dlp 업데이트 실패 (기존 버전 유지): {ex.Message}");
@@ -384,6 +379,11 @@ namespace GMTFV.tools {
                     }
                 }
             } // FileStream 이 닫힌 뒤에 Move 를 호출해야 함
+
+            await FileIntegrityVerifier.VerifyRemoteSha256Async(
+                destPath,
+                new Uri(ChecksumUrl),
+                "yt-dlp.exe");
         }
 
         // ─────────────────────────────────────────────────
