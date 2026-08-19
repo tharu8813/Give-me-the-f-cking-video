@@ -67,37 +67,23 @@ namespace GMTFV.Start {
             isChromeTabImportAvailable = chromeTabImportService.Start();
         }
 
-        /// <summary>메인 화면의 시각적 위계와 빈 목록 안내를 한 곳에서 관리합니다.</summary>
+        /// <summary>디자이너로 설정할 수 없는 런타임 초기화를 한 곳에서 관리합니다.</summary>
         private void ApplyUserExperience() {
-            BackColor = Color.FromArgb(248, 250, 252);
-            headerPanel.BackColor = Color.FromArgb(15, 23, 42);
-            panel1.BackColor = Color.FromArgb(241, 245, 249);
-            panel2.BackColor = BackColor;
-            panel3.BackColor = Color.FromArgb(241, 245, 249);
+            // buttonBaseColors 등록 (Button_MouseEnter/Leave에서 사용)
+            buttonBaseColors[button1] = button1.BackColor;
+            buttonBaseColors[button2] = button2.BackColor;
+            buttonBaseColors[button3] = button3.BackColor;
+            buttonBaseColors[button4] = button4.BackColor;
 
-            label1.Text = "GMTFV";
-            label3.Text = "YouTube 영상과 오디오를 깔끔하게 저장하세요";
-            dragDropLabel.Text = "URL·목록 파일을 끌어 놓거나, Chrome 탭을 한 번에 가져올 수 있어요.";
-            label8.Text = "준비됨 · URL을 추가해 다운로드 목록을 만들어 보세요";
+            // 툴팁 설정
+            toolTip1.SetToolTip(button1, "저장 형식, 폴더, 동시 다운로드 설정");
+            toolTip1.SetToolTip(button2, "YouTube URL을 추가합니다");
+            toolTip1.SetToolTip(button3, "선택한 항목을 목록에서 제거합니다");
+            toolTip1.SetToolTip(button4, "목록의 영상을 다운로드합니다");
 
-            ConfigureButton(button1, Color.FromArgb(51, 65, 85), Color.White, "저장 형식, 폴더, 동시 다운로드 설정");
-            ConfigureButton(button2, Color.FromArgb(37, 99, 235), Color.White, "YouTube URL을 추가합니다");
-            ConfigureButton(button3, Color.FromArgb(248, 250, 252), Color.FromArgb(185, 28, 28), "선택한 항목을 목록에서 제거합니다");
-            button3.FlatAppearance.BorderSize = 1;
-            button3.FlatAppearance.BorderColor = Color.FromArgb(254, 202, 202);
-            ConfigureButton(button4, Color.FromArgb(15, 118, 110), Color.White, "목록의 영상을 다운로드합니다");
             ConfigureChromeTabsButton();
 
-            dataGridView1.BackgroundColor = Color.White;
-            dataGridView1.GridColor = Color.FromArgb(226, 232, 240);
-            dataGridView1.ColumnHeadersDefaultCellStyle.BackColor = Color.FromArgb(30, 41, 59);
-            dataGridView1.ColumnHeadersDefaultCellStyle.ForeColor = Color.White;
-            dataGridView1.ColumnHeadersDefaultCellStyle.Padding = new Padding(8, 6, 8, 6);
-            dataGridView1.DefaultCellStyle.SelectionBackColor = Color.FromArgb(219, 234, 254);
-            dataGridView1.DefaultCellStyle.SelectionForeColor = Color.FromArgb(15, 23, 42);
-            dataGridView1.AlternatingRowsDefaultCellStyle.BackColor = Color.FromArgb(248, 250, 252);
-            dataGridView1.RowTemplate.Height = 84;
-
+            // 빈 목록 안내 레이블 (동적 생성)
             emptyStateLabel.Text = "아직 다운로드 목록이 비어 있습니다\n\nURL 추가 · Chrome 탭 가져오기 · 드래그 앤 드롭 중 편한 방법을 선택하세요.";
             emptyStateLabel.Font = new Font("맑은 고딕", 10.5F);
             emptyStateLabel.ForeColor = Color.FromArgb(100, 116, 139);

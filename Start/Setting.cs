@@ -34,12 +34,6 @@ namespace GMTFV.Start {
 
         public Setting(List<VideoInfo> existingVideos = null, MainForm mainForm = null) {
             InitializeComponent();
-            FormTheme.Apply(this, headerPanel);
-            FormTheme.PrimaryButton(button2);
-            FormTheme.OutlineButton(button3);
-            FormTheme.OutlineButton(btnExport);
-            FormTheme.OutlineButton(btnImport);
-            FormTheme.OutlineButton(btnReset);
             headerTitle.Text = "다운로드 설정";
             tabBasic.Text = "기본";
             tabAdvanced.Text = "고급";

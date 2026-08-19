@@ -134,6 +134,7 @@
     <Reference Include="System.Xml" />
   </ItemGroup>
   <ItemGroup>
+    <Compile Include="services\FormTheme.cs" />
     <Compile Include="Start\AddURL.cs">
       <SubType>Form</SubType>
     </Compile>
@@ -188,7 +189,6 @@
     <Compile Include="services\DownloadQueueService.cs" />
     <Compile Include="services\ChromeTabImportService.cs" />
     <Compile Include="services\FileIntegrityVerifier.cs" />
-    <Compile Include="services\FormTheme.cs" />
     <Compile Include="services\VideoMetadataService.cs" />
     <Compile Include="services\YtDlpDownloadCommandFactory.cs" />
     <EmbeddedResource Include="DevForm.resx">
@@ -217,6 +217,9 @@
     <EmbeddedResource Include="Start\Videoinfoform.resx">
       <DependentUpon>Videoinfoform.cs</DependentUpon>
     </EmbeddedResource>
+    <None Include="chrome-extension\chrome-extension.zip">
+      <CopyToOutputDirectory>Always</CopyToOutputDirectory>
+    </None>
     <None Include="packages.config" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
@@ -228,9 +231,6 @@
       <DesignTimeSharedInput>True</DesignTimeSharedInput>
     </Compile>
     <None Include="README.md" />
-    <Content Include="chrome-extension\manifest.json"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
-    <Content Include="chrome-extension\popup.html"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
-    <Content Include="chrome-extension\popup.js"><CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory></Content>
   </ItemGroup>
   <ItemGroup>
     <None Include="App.config" />

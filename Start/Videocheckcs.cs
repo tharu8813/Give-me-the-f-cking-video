@@ -10,9 +10,7 @@ namespace GMTFV.Start {
 
         public VideoCheckcs(string url) {
             InitializeComponent();
-            FormTheme.Apply(this);
             Text = "영상 미리보기";
-            BackColor = FormTheme.Surface;
             this.url = url;
         }
 

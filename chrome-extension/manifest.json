@@ -1,9 +1,0 @@
-{
-  "manifest_version": 3,
-  "name": "GMTFV YouTube 탭 가져오기",
-  "version": "1.0.0",
-  "description": "현재 Chrome 창의 YouTube 탭을 GMTFV 다운로드 목록으로 보냅니다.",
-  "permissions": ["tabs"],
-  "host_permissions": ["http://127.0.0.1:43128/*"],
-  "action": { "default_title": "GMTFV로 YouTube 탭 가져오기", "default_popup": "popup.html" }
-}

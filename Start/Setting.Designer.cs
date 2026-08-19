@@ -237,7 +237,7 @@ namespace GMTFV.Start {
             // 
             this.comboBox1.DropDownStyle = System.Windows.Forms.ComboBoxStyle.DropDownList;
             this.comboBox1.FormattingEnabled = true;
-            this.comboBox1.Location = new System.Drawing.Point(15, 62);
+            this.comboBox1.Location = new System.Drawing.Point(87, 60);
             this.comboBox1.Name = "comboBox1";
             this.comboBox1.Size = new System.Drawing.Size(100, 25);
             this.comboBox1.TabIndex = 1;
@@ -258,7 +258,7 @@ namespace GMTFV.Start {
             // 
             this.label1.AutoSize = true;
             this.label1.Font = new System.Drawing.Font("맑은 고딕", 10F);
-            this.label1.Location = new System.Drawing.Point(250, 65);
+            this.label1.Location = new System.Drawing.Point(14, 62);
             this.label1.Name = "label1";
             this.label1.Size = new System.Drawing.Size(73, 19);
             this.label1.TabIndex = 0;
@@ -569,8 +569,7 @@ namespace GMTFV.Start {
             // 
             // Setting
             // 
-            this.AutoScaleDimensions = new System.Drawing.SizeF(7F, 15F);
-            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.Font;
+            this.AutoScaleMode = System.Windows.Forms.AutoScaleMode.None;
             this.BackColor = System.Drawing.Color.White;
             this.ClientSize = new System.Drawing.Size(600, 570);
             this.Controls.Add(this.tabControl1);

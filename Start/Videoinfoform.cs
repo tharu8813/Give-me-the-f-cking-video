@@ -25,12 +25,6 @@ namespace GMTFV.Start {
 
         public VideoInfoForm(VideoInfo videoInfo) {
             InitializeComponent();
-            FormTheme.Apply(this, headerPanel);
-            FormTheme.PrimaryButton(button1);
-            FormTheme.SecondaryButton(button2);
-            FormTheme.OutlineButton(btnCopyUrl);
-            FormTheme.OutlineButton(btnOpenUrl);
-            FormTheme.OutlineButton(btnClose);
             headerTitle.Text = "영상 다운로드 옵션";
             button1.Text = "옵션 저장";
             button2.Text = "자막 다운로드";

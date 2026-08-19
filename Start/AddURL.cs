@@ -11,9 +11,6 @@ namespace GMTFV.Start {
 
         public AddURL() {
             InitializeComponent();
-            FormTheme.Apply(this, headerPanel);
-            FormTheme.SecondaryButton(button1);
-            FormTheme.PrimaryButton(button2);
             headerTitle.Text = "새 영상 추가";
             label1.Text = "YouTube 동영상 주소를 입력하세요";
             hintLabel.Text = "예: youtube.com/watch?v=... · Ctrl+V로 붙여넣을 수 있어요";

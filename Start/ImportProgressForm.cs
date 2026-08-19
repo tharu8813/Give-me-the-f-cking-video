@@ -84,8 +84,6 @@ namespace GMTFV.Start {
                 btnCancel.Enabled = false;
             };
 
-            FormTheme.DangerButton(btnCancel);
-
             this.Controls.Add(titleLabel);
             this.Controls.Add(lblStatus);
             this.Controls.Add(progressBar);
