@@ -1,0 +1,182 @@
+; ============================================================================
+; Inno Setup 스크립트 템플릿
+; ============================================================================
+; 아래 항목들만 수정하여 다른 프로그램에도 사용 가능합니다.
+; ============================================================================
+
+#define MyAppName "GMTFV WPF Preview"
+#define MyAppVersion "0.0.0.1"
+#define MyAppPublisher "Ji Beak min(tharu8813)"
+#define MyAppCopyright "© 2024-2026 Ji Beak min(tharu8813). All rights reserved."
+#define MyAppURL "https://github.com/tharu8813/Give-me-the-f-cking-video"
+#define MyAppExeName "GMTFV.Wpf.exe"
+; WinForms 설치본과 완전히 별개의 제품으로 등록합니다.
+#define MyAppGUID "{{9c2c5dc4-42ea-4f7d-b4b5-4b3ee3fd0d61}"
+
+; 선택적 설정 (필요시 수정)
+#define SourcePath "src\GMTFV.Wpf\bin\Release\net10.0-windows"
+#define SetupIconPath "icon.ico"
+#define LicenseFilePath ""  ; 라이센스 파일 경로 (예: "license.txt")
+#define ReadmeFilePath ""   ; Readme 파일 경로 (예: "readme.txt")
+
+; ============================================================================
+; 이하 코드는 수정하지 마세요
+; ============================================================================
+
+[Setup]
+AppId={#MyAppGUID}
+AppName={#MyAppName}
+AppVersion={#MyAppVersion}
+AppVerName={#MyAppName} {#MyAppVersion}
+AppPublisher={#MyAppPublisher}
+AppPublisherURL={#MyAppURL}
+AppSupportURL={#MyAppURL}
+AppUpdatesURL={#MyAppURL}
+AppCopyright={#MyAppCopyright}
+DefaultDirName={commonpf}\{#MyAppName}
+PrivilegesRequired=admin
+DefaultGroupName={#MyAppName}
+DisableProgramGroupPage=yes
+OutputDir=output
+; 구형 WinForms 업데이트는 이름에 setup이 들어간 EXE를 선택합니다.
+; Preview 설치 파일에는 setup을 사용하지 않아 기존 사용자에게 잘못 배포되지 않게 합니다.
+OutputBaseFilename=GMTFV-WPF-Preview-{#MyAppVersion}-installer
+#if SetupIconPath != ""
+SetupIconFile={#SetupIconPath}
+#endif
+#if LicenseFilePath != ""
+LicenseFile={#LicenseFilePath}
+#endif
+#if ReadmeFilePath != ""
+InfoBeforeFile={#ReadmeFilePath}
+#endif
+Compression=lzma2/max
+SolidCompression=yes
+WizardStyle=modern
+UninstallDisplayName={#MyAppName}
+UninstallDisplayIcon={app}\{#MyAppExeName}
+Uninstallable=yes
+AlwaysRestart=no
+DisableDirPage=no
+CloseApplications=force
+CloseApplicationsFilter={#MyAppExeName}
+RestartApplications=no
+ArchitecturesInstallIn64BitMode=x64compatible
+VersionInfoVersion={#MyAppVersion}
+VersionInfoCompany={#MyAppPublisher}
+VersionInfoDescription={#MyAppName} Setup
+VersionInfoCopyright={#MyAppCopyright}
+VersionInfoProductName={#MyAppName}
+VersionInfoProductVersion={#MyAppVersion}
+
+[Languages]
+Name: "korean"; MessagesFile: "compiler:Languages\Korean.isl"
+Name: "english"; MessagesFile: "compiler:Default.isl"
+
+[Tasks]
+Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
+Name: "chromeextension"; Description: "Chrome 탭 가져오기 확장 프로그램 폴더 열기"; GroupDescription: "추가 기능"; Flags: checkedonce
+
+[Files]
+Source: "{#SourcePath}\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourcePath}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.pdb,*.log,*.tmp,yt-dlp.exe,ffmpeg.exe,deno.exe,pot-provider.exe,yt-dlp-plugins\*"
+Source: "{#SourcePath}\yt-dlp.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourcePath}\ffmpeg.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourcePath}\deno.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourcePath}\pot-provider.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourcePath}\yt-dlp-plugins\*"; DestDir: "{app}\yt-dlp-plugins"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[Icons]
+Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
+Name: "{group}\{cm:UninstallProgram,{#MyAppName}}"; Filename: "{uninstallexe}"
+Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: desktopicon
+
+[Run]
+Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
+Filename: "explorer.exe"; Parameters: "{app}\chrome-extension"; Description: "Chrome 탭 가져오기 확장 프로그램 설치 안내 열기"; Flags: postinstall skipifsilent; Tasks: chromeextension
+
+[UninstallDelete]
+Type: filesandordirs; Name: "{app}"
+
+[Code]
+{ 이전 버전 제거를 위한 함수들 }
+
+function GetUninstallString(): String;
+var
+  sUnInstPath: String;
+  sUnInstallString: String;
+begin
+  sUnInstPath := ExpandConstant('Software\Microsoft\Windows\CurrentVersion\Uninstall\{#emit SetupSetting("AppId")}_is1');
+  sUnInstallString := '';
+  if not RegQueryStringValue(HKLM, sUnInstPath, 'UninstallString', sUnInstallString) then
+    RegQueryStringValue(HKCU, sUnInstPath, 'UninstallString', sUnInstallString);
+  Result := sUnInstallString;
+end;
+
+function IsUpgrade(): Boolean;
+begin
+  Result := (GetUninstallString() <> '');
+end;
+
+function UnInstallOldVersion(): Integer;
+var
+  sUnInstallString: String;
+  iResultCode: Integer;
+begin
+  { Return Values: }
+  { 1 - uninstall string is empty }
+  { 2 - error executing the UnInstallString }
+  { 3 - successfully executed the UnInstallString }
+
+  Result := 0;
+  sUnInstallString := GetUninstallString();
+  
+  if sUnInstallString <> '' then begin
+    sUnInstallString := RemoveQuotes(sUnInstallString);
+    if Exec(sUnInstallString, '/SILENT /NORESTART /SUPPRESSMSGBOXES', '', SW_HIDE, ewWaitUntilTerminated, iResultCode) then
+      Result := 3
+    else
+      Result := 2;
+  end else
+    Result := 1;
+end;
+
+{ 실행 중인 프로세스 종료 }
+function PrepareToInstall(var NeedsRestart: Boolean): String;
+var
+  ResultCode: Integer;
+begin
+  Result := '';
+  
+  { 프로그램이 실행 중인 경우 종료 시도 }
+  if CheckForMutexes('{#MyAppName}') then
+  begin
+    if MsgBox('설치를 계속하려면 {#MyAppName}을(를) 종료해야 합니다.' + #13#10 + '지금 종료하시겠습니까?', 
+              mbConfirmation, MB_YESNO) = IDYES then
+    begin
+      Exec('taskkill.exe', '/F /IM {#MyAppExeName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
+      Sleep(1000);
+    end else
+      Result := '설치가 취소되었습니다.';
+  end;
+end;
+
+procedure CurStepChanged(CurStep: TSetupStep);
+begin
+  if (CurStep = ssInstall) then
+  begin
+    if (IsUpgrade()) then
+    begin
+      UnInstallOldVersion();
+    end;
+  end;
+end;
+
+{ 설치 완료 후 정보 }
+procedure CurPageChanged(CurPageID: Integer);
+begin
+  if CurPageID = wpFinished then
+  begin
+    { 필요시 추가 작업 }
+  end;
+end;

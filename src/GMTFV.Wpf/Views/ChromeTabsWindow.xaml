@@ -1,0 +1,32 @@
+<Window x:Class="GMTFV.Wpf.Views.ChromeTabsWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Chrome 탭 가져오기" Width="590" Height="460" MinWidth="520" MinHeight="420"
+        WindowStartupLocation="CenterOwner" ShowInTaskbar="False" Background="{StaticResource Brush.Canvas}">
+    <Grid Margin="26,24,26,22">
+        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="16" /><RowDefinition Height="*" /><RowDefinition Height="14" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+        <StackPanel>
+            <TextBlock Text="Chrome에서 탭 가져오기" FontSize="23" FontWeight="SemiBold" />
+            <TextBlock Margin="0,6,0,0" Text="GMTFV가 확장 프로그램에 탭 정보를 요청합니다." Style="{StaticResource CaptionText}" />
+        </StackPanel>
+        <Border Grid.Row="2" Padding="18" Style="{StaticResource Card}">
+            <StackPanel>
+                <TextBlock Text="가져올 범위" Style="{StaticResource SectionTitle}" />
+                <TextBlock Margin="0,5,0,14" Text="Chrome 확장이 설치되어 있으면 원하는 범위의 YouTube 탭이 대기열에 추가됩니다." Style="{StaticResource CaptionText}" TextWrapping="Wrap" />
+                <Button Style="{StaticResource PrimaryButton}" Click="Current_Click">현재 활성 탭 가져오기</Button>
+                <Button Margin="0,8,0,0" Style="{StaticResource SecondaryButton}" Click="Selected_Click">Chrome에서 다중 선택한 탭 가져오기</Button>
+                <Button Margin="0,8,0,0" Style="{StaticResource SecondaryButton}" Click="All_Click">현재 Chrome 창의 전체 YouTube 탭 가져오기</Button>
+                <Border Margin="0,16,0,0" Padding="12" Style="{StaticResource MutedCard}">
+                    <StackPanel>
+                        <TextBlock x:Name="RequestStatus" Text="가져올 범위를 선택해주세요." Foreground="{StaticResource Brush.TextSecondary}" TextWrapping="Wrap" />
+                        <TextBlock Margin="0,6,0,0" Text="선택 탭: Chrome 탭 표시줄에서 Ctrl 또는 Shift로 여러 탭을 선택한 상태를 의미합니다." Style="{StaticResource CaptionText}" TextWrapping="Wrap" />
+                    </StackPanel>
+                </Border>
+            </StackPanel>
+        </Border>
+        <Grid Grid.Row="4">
+            <Button HorizontalAlignment="Left" Style="{StaticResource SecondaryButton}" Click="InstallHelp_Click">확장 설치 도움말</Button>
+            <Button HorizontalAlignment="Right" Style="{StaticResource PrimaryButton}" Click="Close_Click">닫기</Button>
+        </Grid>
+    </Grid>
+</Window>

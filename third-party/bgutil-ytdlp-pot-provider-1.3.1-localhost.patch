@@ -1,0 +1,22 @@
+--- a/server/src/main.ts
++++ b/server/src/main.ts
+@@
+-            host: "::",
++            host: "127.0.0.1",
+@@
+-                `Could not listen on [::]:${PORT_NUMBER}, falling back to 0.0.0.0 (Caused by ${strerror(err)})`,
++                `Could not listen on 127.0.0.1:${PORT_NUMBER} (Caused by ${strerror(err)})`,
+@@
+-        // ipv4 only systems might not be able to bind to "::", so we try 0.0.0.0 instead
+-        // this is temporary as we plan to bind to localhost in the next major version
++        // The local PO Token provider must not be exposed to other devices.
+         httpServer.listen(
+             {
+-                host: "0.0.0.0",
++                host: "127.0.0.1",
+@@
+-                    `Could not listen on [::]:${PORT_NUMBER} (Caused by ${strerror(err)})`,
++                    `Could not listen on 127.0.0.1:${PORT_NUMBER} (Caused by ${strerror(err)})`,
+@@
+-                    `Started POT server (v${VERSION}) on address 0.0.0.0:${PORT_NUMBER}`,
++                    `Started POT server (v${VERSION}) on address 127.0.0.1:${PORT_NUMBER}`,

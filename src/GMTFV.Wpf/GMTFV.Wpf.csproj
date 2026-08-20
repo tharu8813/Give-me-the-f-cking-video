@@ -5,11 +5,36 @@
     <UseWPF>true</UseWPF>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
-    <ApplicationIcon>..\..\icon.ico</ApplicationIcon>
-    <AssemblyName>GMTFV</AssemblyName>
+    <AssemblyName>GMTFV.Wpf</AssemblyName>
+    <AssemblyTitle>GMTFV WPF Preview</AssemblyTitle>
     <RootNamespace>GMTFV.Wpf</RootNamespace>
+    <Version>0.0.0.1</Version>
+    <AssemblyVersion>0.0.0.1</AssemblyVersion>
+    <FileVersion>0.0.0.1</FileVersion>
+    <InformationalVersion>0.0.0.1</InformationalVersion>
+    <IncludeSourceRevisionInInformationalVersion>false</IncludeSourceRevisionInInformationalVersion>
+    <Product>GMTFV WPF Preview</Product>
+    <ApplicationIcon>..\..\icon.ico</ApplicationIcon>
   </PropertyGroup>
+
   <ItemGroup>
-    <Content Include="..\..\chrome-extension\**\*" Link="chrome-extension\%(RecursiveDir)%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <ProjectReference Include="..\GMTFV.Core\GMTFV.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="..\..\yt-dlp.exe" Link="yt-dlp.exe" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\yt-dlp.exe')" />
+    <Content Include="..\..\ffmpeg.exe" Link="ffmpeg.exe" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\ffmpeg.exe')" />
+    <Content Include="..\..\deno.exe" Link="deno.exe" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\deno.exe')" />
+    <Content Include="..\..\pot-provider.exe" Link="pot-provider.exe" CopyToOutputDirectory="PreserveNewest" Condition="Exists('..\..\pot-provider.exe')" />
+    <Content Include="..\..\yt-dlp-plugins\bgutil-ytdlp-pot-provider.zip" Link="yt-dlp-plugins\bgutil-ytdlp-pot-provider.zip" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\chrome-extension\manifest.json" Link="chrome-extension\manifest.json" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\chrome-extension\popup.html" Link="chrome-extension\popup.html" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\chrome-extension\popup.js" Link="chrome-extension\popup.js" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\chrome-extension\background.js" Link="chrome-extension\background.js" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\LICENSE.txt" Link="LICENSE.txt" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\docs\third-party-licenses.md" Link="docs\third-party-licenses.md" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\licenses\MIT-Deno.txt" Link="licenses\MIT-Deno.txt" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\licenses\Unlicense-yt-dlp.txt" Link="licenses\Unlicense-yt-dlp.txt" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\third-party\bgutil-ytdlp-pot-provider-1.3.1-localhost.patch" Link="third-party\bgutil-ytdlp-pot-provider-1.3.1-localhost.patch" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>

@@ -361,4 +361,10 @@ MigrationBackup/
 
 # Fody - auto-generated XML schema
 FodyWeavers.xsd
-/output-setup
+/output/
+
+# 배포용 외부 도구는 용량 제한 때문에 저장소에 커밋하지 않습니다.
+/yt-dlp.exe
+/ffmpeg.exe
+/deno.exe
+/pot-provider.exe

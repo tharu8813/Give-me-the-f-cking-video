@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "GMTFV YouTube 탭 가져오기",
+  "version": "2.1.0",
+  "description": "현재 또는 선택한 YouTube 탭을 GMTFV WPF 다운로드 목록으로 보냅니다.",
+  "permissions": ["tabs", "alarms"],
+  "host_permissions": ["http://127.0.0.1:43128/*"],
+  "action": { "default_title": "GMTFV로 YouTube 탭 가져오기", "default_popup": "popup.html" },
+  "background": { "service_worker": "background.js" }
+}
