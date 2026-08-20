@@ -2,6 +2,9 @@
   <img src="icon.ico" alt="icon" width="180">
 </p>
 
+> [!WARNING]
+> 해당 저장소에 일부 파일은 Codex로 인해 생성되었습니다.
+
 # GMTFV (야발아 동영상 내와)
 [![.NET Framework](https://img.shields.io/badge/.NET%20Framework-4.7.2%20WinForms-512BD4)](https://dotnet.microsoft.com/download/dotnet-framework)
 [![Windows](https://img.shields.io/badge/Platform-Windows-0078D6?logo=windows)](https://www.microsoft.com/windows)
