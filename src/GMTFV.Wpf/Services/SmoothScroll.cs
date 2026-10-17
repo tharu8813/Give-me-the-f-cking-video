@@ -7,6 +7,12 @@ namespace GMTFV.Wpf.Services;
 
 public static class SmoothScroll
 {
+    private static readonly List<WeakReference<ScrollViewer>> Viewers = [];
+    static SmoothScroll() => Motion.PreferenceChanged += () => {
+        if (Motion.Enabled) return;
+        foreach (var weak in Viewers.ToArray()) if (weak.TryGetTarget(out var viewer)) Stop(viewer, null!);
+        Viewers.RemoveAll(w => !w.TryGetTarget(out _));
+    };
     public static readonly DependencyProperty EnabledProperty = DependencyProperty.RegisterAttached("Enabled", typeof(bool), typeof(SmoothScroll), new PropertyMetadata(false, Changed));
     private static readonly DependencyProperty OffsetProperty = DependencyProperty.RegisterAttached("Offset", typeof(double), typeof(SmoothScroll), new PropertyMetadata(0d, (d, e) => ((ScrollViewer)d).ScrollToVerticalOffset((double)e.NewValue)));
     public static bool GetEnabled(DependencyObject d) => (bool)d.GetValue(EnabledProperty);
@@ -15,6 +21,8 @@ public static class SmoothScroll
     {
         if (d is not ScrollViewer viewer) return;
         if ((bool)e.NewValue) {
+            Viewers.RemoveAll(w => !w.TryGetTarget(out var existing) || ReferenceEquals(existing, viewer));
+            Viewers.Add(new(viewer));
             viewer.PreviewMouseWheel += Wheel; viewer.PreviewMouseDown += Stop; viewer.PreviewKeyDown += Stop; viewer.Unloaded += Stop;
         }
         else {

@@ -1,3 +1,18 @@
 <UserControl x:Class="GMTFV.Wpf.Views.DiagnosticsView" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:s="clr-namespace:GMTFV.Wpf.Services" s:Motion.Enter="True">
- <DockPanel><StackPanel DockPanel.Dock="Top"><TextBlock Text="준비된 도구, 확실한 다운로드." Style="{StaticResource SectionTitle}" Margin="0,0,0,12" /><TextBlock Text="설치된 도구의 버전과 누락 여부를 확인하세요.&#10;진단 로그는 안정판과 별도로 기록됩니다." Style="{StaticResource Caption}" LineHeight="22" Margin="0,0,0,20" /><Button Content="도구 버전 확인" Style="{StaticResource PrimaryButton}" Command="{Binding CheckToolsCommand}" /><Button Content="진단 로그 열기" Command="{Binding OpenLogsCommand}" Margin="0,8,0,16" /></StackPanel><ScrollViewer><TextBox Text="{Binding ToolReport, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" FontFamily="{StaticResource MonoFont}" FontSize="12" BorderThickness="0" /></ScrollViewer></DockPanel>
+ <ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
+  <TextBlock Text="다운로드 준비" FontSize="{StaticResource DisplaySize}" FontWeight="SemiBold" Margin="0,0,0,12" />
+  <TextBlock Text="영상 받기와 변환에 필요한 도구를 앱 안에서 준비합니다. 이미 설치한 도구 폴더도 사용할 수 있습니다." Style="{StaticResource Caption}" TextWrapping="Wrap" LineHeight="22" Margin="0,0,0,24" />
+  <Border Background="{DynamicResource InputBrush}" CornerRadius="12" Padding="18"><StackPanel>
+   <TextBlock Text="{Binding Tools.Status}" FontSize="16" FontWeight="SemiBold" TextWrapping="Wrap" Margin="0,0,0,14" />
+   <ProgressBar IsIndeterminate="True" Height="3" Margin="0,0,0,14" Visibility="{Binding Tools.IsPreparing, Converter={StaticResource BoolVisibility}}" />
+   <TextBlock Text="yt-dlp · 영상 받기&#10;FFmpeg / FFprobe · 병합, 변환, 파일 검증&#10;Deno · YouTube 영상 정보 처리" Foreground="{DynamicResource MutedBrush}" LineHeight="24" Margin="0,0,0,18" />
+   <Button Content="도구 설치 / 새 버전 준비" Style="{StaticResource PrimaryButton}" Command="{Binding InstallToolsCommand}" />
+   <Button Content="준비 취소" Command="{Binding CancelToolSetupCommand}" Margin="0,8,0,0" Visibility="{Binding Tools.IsPreparing, Converter={StaticResource BoolVisibility}}" />
+   <TextBlock Text="공식 GitHub 배포와 FFmpeg가 안내하는 Gyan 빌드에서 받습니다. SHA-256을 검증한 뒤 별도 폴더로 설치합니다. 공유 폴더와 사용 중인 도구는 교체하지 않습니다. 준비가 끝나면 현재 설정도 함께 저장합니다." Style="{StaticResource Caption}" TextWrapping="Wrap" LineHeight="21" Margin="0,14,0,0" />
+  </StackPanel></Border>
+  <Button Content="설치된 버전 다시 확인" Command="{Binding CheckToolsCommand}" Margin="0,16,0,8" />
+  <Button Content="다른 도구 폴더 선택" Command="{Binding ChooseToolsCommand}" Margin="0,0,0,8" />
+  <Button Content="진단 로그 폴더 열기" Command="{Binding OpenLogsCommand}" />
+  <Expander Header="설치 경로와 기술 정보" Margin="0,16,0,0"><TextBox Text="{Binding Tools.Report, Mode=OneWay}" IsReadOnly="True" TextWrapping="Wrap" FontFamily="{StaticResource MonoFont}" FontSize="12" BorderThickness="0" Margin="0,10,0,0" /></Expander>
+ </StackPanel></ScrollViewer>
 </UserControl>

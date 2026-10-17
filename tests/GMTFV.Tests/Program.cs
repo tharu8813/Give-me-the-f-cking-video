@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -13,7 +13,7 @@ using Newtonsoft.Json;
 
 internal static class Program {
     private static int passed, failed;
-    private static readonly string Self = typeof(Program).Assembly.Location;
+    private static readonly string Self = Environment.ProcessPath;
     private static readonly string Root = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "gmtfv-tests-" + Guid.NewGuid().ToString("N"));
     private const string Id = "BaW_jenozKc";
     private static int Main(string[] args) {
@@ -153,68 +153,6 @@ internal static class Program {
         await Test("403 refresh limited to one recovery", async () => { var fake = new FakeRunner { Failures = 9, ErrorText = "HTTP 403 Forbidden" }; await ThrowsAsync<InvalidOperationException>(() => Service(fake).DownloadAsync(Request("403.mp4"), null, CancellationToken.None)); Equal(2, fake.DownloadCalls); });
         await Test("provider failure falls back without plugin", async () => { var fake = new FakeRunner { Failures = 1, ErrorText = "PO Token provider unavailable" }; await Service(fake).DownloadAsync(Request("provider.mp4"), null, CancellationToken.None); Check(fake.Commands.Last().Contains("--no-plugin-dirs")); Equal(2, fake.DownloadCalls); });
         await Test("engine cancelled before file creation", async () => { var fake = new FakeRunner(); using (var cts = new CancellationTokenSource()) { cts.Cancel(); await ThrowsAsync<OperationCanceledException>(() => Service(fake).DownloadAsync(Request("never.mp4"), null, cts.Token)); Equal(0, fake.DownloadCalls); } });
-        await Test("atomic tool replacement and rollback", async () => {
-            string source = Path.Combine(Root, "new-tool.bin"), destination = Path.Combine(Root, "installed.bin");
-            File.WriteAllText(source, "new"); File.WriteAllText(destination, "old");
-            GMTFV.services.FileIntegrityVerifier.InstallVerifiedFile(source, destination); Equal("new", File.ReadAllText(destination));
-            using (File.Open(destination, FileMode.Open, FileAccess.Read, FileShare.None))
-                await Throws<IOException>(() => GMTFV.services.FileIntegrityVerifier.InstallVerifiedFile(source, destination));
-            Equal("new", File.ReadAllText(destination));
-        });
-        await Test("checksum verifies exact bytes", async () => {
-            string path = Path.Combine(Root, "checksum.txt"); File.WriteAllText(path, "abc", new UTF8Encoding(false));
-            GMTFV.services.FileIntegrityVerifier.VerifySha256(path, "sha256:ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
-            await Throws<InvalidOperationException>(() => GMTFV.services.FileIntegrityVerifier.VerifySha256(path, new string('0', 64)));
-        });
-        await Test("WinForms settings and add URL render", () => RunSta(() => {
-            foreach (System.Windows.Forms.Form form in new System.Windows.Forms.Form[] { new GMTFV.Start.Setting(), new GMTFV.Start.AddURL() }) {
-                using (form) {
-                    Render(form, form.GetType().Name);
-                    if (form is GMTFV.Start.Setting) {
-                        ((System.Windows.Forms.TabControl)form.Controls.Find("tabControl1", true).Single()).SelectedIndex = 1;
-                        Render(form, "Setting-advanced");
-                    }
-                }
-            }
-        }));
-        await Test("WinForms main render and safe close", () => RunSta(() => {
-            using (var form = new GMTFV.Start.MainForm()) {
-                // Render the real controls without executing startup downloads or writing user settings.
-                form.Shown -= (EventHandler)Delegate.CreateDelegate(typeof(EventHandler), form, "MainFrom_Shown");
-                form.Load -= (EventHandler)Delegate.CreateDelegate(typeof(EventHandler), form, "MainFrom_Load");
-                Render(form, "MainForm");
-                var flags = System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic;
-                typeof(GMTFV.Start.MainForm).GetField("isDownloading", flags).SetValue(form, true);
-                var add = typeof(GMTFV.Start.MainForm).GetMethod("AddVideoAsync", flags);
-                ((Task)add.Invoke(form, new object[] { "https://youtu.be/" + Id, CancellationToken.None })).GetAwaiter().GetResult();
-                ((Task)add.Invoke(form, new object[] { "https://youtube.com/watch?v=" + Id, CancellationToken.None })).GetAwaiter().GetResult();
-                var pending = (HashSet<string>)typeof(GMTFV.Start.MainForm).GetField("pendingUrls", flags).GetValue(form);
-                Equal(1, pending.Count); pending.Clear();
-                typeof(GMTFV.Start.MainForm).GetField("isDownloading", flags).SetValue(form, false);
-                typeof(GMTFV.Start.MainForm).GetMethod("OnFormClosing", System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic)
-                    .Invoke(form, new object[] { new System.Windows.Forms.FormClosingEventArgs(System.Windows.Forms.CloseReason.ApplicationExitCall, false) });
-            }
-        }));
-        await Test("legacy playlist config preserves FPS", () => {
-            var video = new GMTFV.tools.VideoInfo { ID = Id, VideoQualities = new List<GMTFV.tools.VideoQuality> {
-                new GMTFV.tools.VideoQuality { Quality = "1080p", Fps = 60, IsSelected = true }, new GMTFV.tools.VideoQuality { Quality = "1080p", Fps = 30 } } };
-            var config = JsonConvert.DeserializeObject<GMTFV.models.ExportVideoData>("{\"Url\":\"https://youtu.be/" + Id + "\",\"IsTypeVideo\":true,\"SubType\":\"mkv\",\"Quality\":\"1080p\",\"Fps\":30}");
-            GMTFV.tools.PlaylistManager.ApplyConfiguration(video, config); Equal(30, video.VideoQualities.Single(q => q.IsSelected).Fps); Equal("mkv", video.TypeSave.SubType);
-            return Task.CompletedTask;
-        });
-        await Test("invalid imported format cannot change existing config", () => {
-            var video = new GMTFV.tools.VideoInfo { TypeSave = new GMTFV.tools.TypeSaveVideo { IsTypeVideo = true, SubType = "mp4" } };
-            return Throws<InvalidDataException>(() => GMTFV.tools.PlaylistManager.ApplyConfiguration(video, new GMTFV.models.ExportVideoData { SubType = "../bad" }));
-        });
-        await Test("Chrome canonical duplicates", () => {
-            var urls = GMTFV.services.ChromeTabImportService.ParseYouTubeUrls(JsonConvert.SerializeObject(new[] { "https://youtu.be/" + Id, "https://youtube.com/watch?v=" + Id, "https://evil.com/watch?v=" + Id }));
-            Equal(1, urls.Count); return Task.CompletedTask;
-        });
-        await Test("Chrome deployment contains loadable manifest", () => {
-            string directory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "chrome-extension");
-            var manifest = Newtonsoft.Json.Linq.JObject.Parse(File.ReadAllText(Path.Combine(directory, "manifest.json")));
-            Equal(3, manifest.Value<int>("manifest_version")); Check(File.Exists(Path.Combine(directory, "popup.js"))); return Task.CompletedTask;
-        });
     }
 
     private static DownloadService Service(FakeRunner runner) {
@@ -231,22 +169,6 @@ internal static class Program {
     private static void Check(bool condition) { if (!condition) throw new Exception("Assertion failed"); }
     private static void Equal<T>(T expected, T actual) { if (!EqualityComparer<T>.Default.Equals(expected, actual)) throw new Exception($"Expected {expected}, got {actual}"); }
     private static Task Throws<T>(Action action) where T : Exception { try { action(); } catch (T) { return Task.CompletedTask; } throw new Exception("Expected " + typeof(T).Name); }
-    private static Task RunSta(Action action) {
-        var completion = new TaskCompletionSource<bool>();
-        var thread = new Thread(() => { try { action(); completion.SetResult(true); } catch (Exception ex) { completion.SetException(ex); } });
-        thread.SetApartmentState(ApartmentState.STA); thread.Start(); return completion.Task;
-    }
-    private static void Render(System.Windows.Forms.Form form, string name) {
-        form.ShowInTaskbar = false;
-        form.StartPosition = System.Windows.Forms.FormStartPosition.Manual;
-        form.Location = new System.Drawing.Point(-32000, -32000);
-        form.Show(); form.PerformLayout(); System.Windows.Forms.Application.DoEvents();
-        Check(form.Controls.Cast<System.Windows.Forms.Control>().Any(control => control.Visible));
-        using (var bitmap = new System.Drawing.Bitmap(form.Width, form.Height)) {
-            form.DrawToBitmap(bitmap, new System.Drawing.Rectangle(0, 0, form.Width, form.Height));
-            bitmap.Save(Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "ui-" + name + ".png"));
-        }
-    }
     private static async Task ThrowsAsync<T>(Func<Task> action) where T : Exception { try { await action(); } catch (T) { return; } throw new Exception("Expected " + typeof(T).Name); }
     private sealed class Capture : IProgress<DownloadProgress> { private readonly Action<DownloadProgress> action; public Capture(Action<DownloadProgress> action) { this.action = action; } public void Report(DownloadProgress value) => action(value); }
 

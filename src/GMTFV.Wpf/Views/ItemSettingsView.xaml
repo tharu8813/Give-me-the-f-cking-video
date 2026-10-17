@@ -2,7 +2,7 @@
  <DockPanel>
   <Grid DockPanel.Dock="Top" Margin="0,0,0,18">
    <TextBlock Text="영상별 설정" Style="{StaticResource SectionTitle}" VerticalAlignment="Center" />
-   <Button Content="×" Style="{StaticResource IconButton}" HorizontalAlignment="Right" Command="{Binding DataContext.CloseItemCommand, RelativeSource={RelativeSource AncestorType=Window}}" AutomationProperties.Name="영상 설정 닫기" />
+   <Button Content="닫기" HorizontalAlignment="Right" Command="{Binding DataContext.CloseItemCommand, RelativeSource={RelativeSource AncestorType=Window}}" AutomationProperties.Name="영상 설정 닫기" />
   </Grid>
   <StackPanel DockPanel.Dock="Bottom" Margin="0,18,0,0">
    <TextBlock Text="{Binding Status}" TextWrapping="Wrap" Style="{StaticResource Caption}" Margin="0,0,0,12" />
@@ -10,7 +10,7 @@
   </StackPanel>
   <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,12,0">
    <StackPanel>
-    <TextBlock Text="{Binding Item.Title}" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" />
+    <Border Height="160" CornerRadius="10" Background="{DynamicResource InputBrush}" ClipToBounds="True" Margin="0,0,0,18"><Image Source="{Binding Item.Thumbnail, Converter={StaticResource Thumbnail}}" Stretch="UniformToFill" /></Border><TextBlock Text="{Binding Item.Title}" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" />
     <TextBlock Text="{Binding Item.Channel}" Style="{StaticResource Caption}" Margin="0,8,0,0" />
     <TextBlock Text="{Binding UploadDate, StringFormat=업로드일 · {0}}" Style="{StaticResource Caption}" Margin="0,6,0,12" />
     <TextBox Text="{Binding Item.Url, Mode=OneWay}" IsReadOnly="True" AutomationProperties.Name="영상 URL" />

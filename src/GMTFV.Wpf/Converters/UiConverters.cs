@@ -4,6 +4,18 @@ using System.Windows.Data;
 using System.Windows.Media.Imaging;
 namespace GMTFV.Wpf.Converters;
 
+public sealed class HasSelectionConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) => value is int count && count > 0;
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => Binding.DoNothing;
+}
+
+public sealed class QualityLabelConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) => value is int height ? height == 0 ? "최고 화질" : $"{height}p" : "";
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => Binding.DoNothing;
+}
+
 public sealed class HasValueConverter : IValueConverter
 {
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture) => value is string text ? text.Length > 0 : value != null;

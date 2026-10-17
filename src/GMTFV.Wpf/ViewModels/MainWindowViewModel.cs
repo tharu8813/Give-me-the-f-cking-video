@@ -20,6 +20,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
 {
     private readonly IDownloadBackend backend;
     private readonly DiagnosticLog log;
+    private readonly SettingsStore store;
+    private string savedSettings = "";
     private readonly CancellationTokenSource lifetime = new();
     private readonly SemaphoreSlim metadataSlots = new(3);
     private readonly HashSet<Task> operations = [];
@@ -40,6 +42,11 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
     }
     public int[] Heights { get; } = [0, 2160, 1440, 1080, 720, 480, 360];
+    public string[] Modes { get; } = ["영상", "오디오"];
+    public string SelectedMode { get => Settings.IsVideo ? "영상" : "오디오"; set => Settings.IsVideo = value == "영상"; }
+    public int SelectedHeight { get => Settings.Height; set => Settings.Height = value; }
+    public string SettingsStatus => JsonSerializer.Serialize(Settings) == savedSettings ? "설정 저장됨" : "변경됨 · 저장하면 다음 실행에도 유지됩니다";
+    public string FileNamePreview => WindowsFileName.Build("나의 영상", "채널", "abcdefghijk", Settings.Format, Settings.FileNameTemplate, 1);
     public int[] ConcurrencyChoices { get; } = Enumerable.Range(1, 16).ToArray();
     public string[] Encoders { get; } = ["libx264", "h264_nvenc", "h264_amf", "h264_qsv"];
     public int[] AudioBitrates => new[] { 32, 64, 96, 128, 160, 192, 256, 320, 384, 448, 512, Settings.AudioBitrate }.Distinct().Order().ToArray();
@@ -59,24 +66,26 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public string DisplayedPanel { get; private set; } = "";
     public string PanelTitle => DisplayedPanel switch { "Settings" => "설정", "Diagnostics" => "도구 및 진단", "About" => "앱 정보", _ => "" };
     public bool HasPanel => Panel.Length > 0;
-    public bool IsWorkspaceEnabled => !HasPanel && Failure == null && ItemSettings == null;
+    public bool IsWorkspaceEnabled => !HasPanel && Failure == null && ItemSettings == null && !Tools.IsPreparing && !applyingUpdate;
     private ItemSettingsViewModel? itemSettings;
     public ItemSettingsViewModel? ItemSettings { get => itemSettings; private set { if (value != null) { DisplayedItemSettings = value; Raise(nameof(DisplayedItemSettings)); } if (Set(ref itemSettings, value)) Raise(nameof(IsWorkspaceEnabled)); } }
     public ItemSettingsViewModel? DisplayedItemSettings { get; private set; }
-    private string toolReport = "도구 버전 확인을 눌러 설치 경로와 버전을 확인하세요.";
-    public string ToolReport { get => toolReport; private set => Set(ref toolReport, value); }
     private DownloadItemViewModel? failure;
     public DownloadItemViewModel? Failure { get => failure; set { if (Set(ref failure, value)) Raise(nameof(IsWorkspaceEnabled)); } }
     private bool isRunning;
     public bool IsRunning { get => isRunning; private set { if (Set(ref isRunning, value)) Raise(nameof(CanEditSettings)); } }
-    public bool CanEditSettings => !IsRunning;
+    private bool applyingUpdate;
+    public bool CanEditSettings => !IsRunning && !Tools.IsPreparing && !applyingUpdate;
+    public ToolWorkspaceViewModel Tools { get; }
+    public AppUpdateViewModel Updates { get; }
     public int CompletedCount => Items.Count(i => i.State == DownloadState.Completed);
     public int FailedCount => Items.Count(i => i.State == DownloadState.Failed);
     public int ActiveCount => Items.Count(i => i.CanCancel);
     public bool IsEmpty => Items.Count == 0;
-    public double OverallProgress => Items.Count == 0 ? 0 : Items.Average(i => i.Progress);
+    public double OverallProgress => Items.Count == 0 ? 0 : 100d * CompletedCount / Items.Count;
+    public string CompletionSummary => $"{CompletedCount} / {Items.Count}개 저장 완료";
     public string Summary => $"{Items.Count}개 항목  /  {ActiveCount}개 작업 중  /  {CompletedCount}개 완료";
-    public string Version => $"GMTFV {typeof(MainWindowViewModel).Assembly.GetName().Version?.ToString(3)} · .NET 10 / WPF";
+    public string Version => $"GMTFV {typeof(MainWindowViewModel).Assembly.GetName().Version} · .NET 10 / WPF";
 
     public ICommand AddCommand { get; }
     public ICommand StartCommand { get; }
@@ -101,15 +110,30 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public ICommand CloseItemCommand { get; }
     public ICommand CopyItemUrlCommand { get; }
     public ICommand OpenItemUrlCommand { get; }
+    public ICommand OpenFileCommand { get; }
+    public ICommand RevealFileCommand { get; }
+    public ICommand RemoveSelectedCommand { get; }
+    public ICommand CancelSelectedCommand { get; }
+    public ICommand MoveUpCommand { get; }
+    public ICommand MoveDownCommand { get; }
+    public ICommand ResetSettingsCommand { get; }
+    public ICommand InstallToolsCommand { get; }
+    public ICommand CancelToolSetupCommand { get; }
+    public ICommand OpenReleaseCommand { get; }
 
-    public MainWindowViewModel(IDownloadBackend backend, SettingsStore store, DiagnosticLog log)
+    public MainWindowViewModel(IDownloadBackend backend, SettingsStore store, DiagnosticLog log, AppUpdateService? appUpdates = null)
     {
-        this.backend = backend; this.log = log;
+        this.backend = backend; this.log = log; this.store = store;
         Items.CollectionChanged += ItemsChanged;
         try { Settings = store.Load(); }
         catch (Exception ex) { Settings = new PreviewSettings(); Toast = "설정 로드 실패 · " + ex.Message; log.Write("settings", ex.Message); }
-        AddCommand = Async(_ => { string input = UrlInput; UrlInput = ""; return AddUrlsAsync(input); }, _ => !string.IsNullOrWhiteSpace(UrlInput));
-        StartCommand = Async(_ => StartAsync(), _ => !IsRunning && Items.Any(i => i.State == DownloadState.Ready));
+        Tools = new ToolWorkspaceViewModel(Path.Combine(store.DirectoryPath, "Tools"), log, lifetime.Token);
+        Tools.PropertyChanged += ToolsChanged;
+        Updates = new AppUpdateViewModel(appUpdates ?? new AppUpdateService(), Path.Combine(store.DirectoryPath, "Updates"), CanInstallAppUpdate, InstallAppUpdateAsync, log, lifetime.Token);
+        savedSettings = JsonSerializer.Serialize(Settings);
+        Settings.PropertyChanged += SettingsChanged;
+        AddCommand = Async(_ => { string input = UrlInput; UrlInput = ""; return AddUrlsAsync(input); }, _ => !applyingUpdate && !string.IsNullOrWhiteSpace(UrlInput));
+        StartCommand = Async(_ => StartAsync(), _ => CanEditSettings && Items.Any(i => i.State == DownloadState.Ready));
         CancelAllCommand = new RelayCommand(_ => CancelAll(), _ => ActiveCount > 0);
         CancelCommand = new RelayCommand(p => Cancel((DownloadItemViewModel)p!), p => p is DownloadItemViewModel i && i.CanCancel);
         RetryCommand = Async(p => RetryAsync((DownloadItemViewModel)p!), p => !IsRunning && p is DownloadItemViewModel i && i.CanRetry && !i.CanCancel);
@@ -121,14 +145,18 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
             Items.Remove(item); RefreshSummary();
         }, p => p is DownloadItemViewModel i && i.Cancellation == null && !i.IsRemoving);
         PanelCommand = new RelayCommand(p => Panel = Panel == (string?)p ? "" : (string?)p ?? "");
+        OpenReleaseCommand = Async(_ => { Process.Start(new ProcessStartInfo(AppUpdateService.Repository + "/releases/latest") { UseShellExecute = true }); return Task.CompletedTask; });
         FailureCommand = new RelayCommand(p => Failure = p as DownloadItemViewModel);
-        SaveSettingsCommand = Async(_ => { store.Save(Settings); Motion.ReduceMotion = Settings.ReduceMotion; Notify("설정이 저장되었습니다."); RefreshSelections(); return Task.CompletedTask; });
-        ModeChangedCommand = new RelayCommand(_ => { Raise(nameof(Settings)); Raise(nameof(Formats)); Settings.Format = Settings.IsVideo ? "mp4" : "mp3"; Raise(nameof(SelectedFormat)); RefreshSelections(); });
+        SaveSettingsCommand = Async(_ => { store.Save(Settings); savedSettings = JsonSerializer.Serialize(Settings); Raise(nameof(SettingsStatus)); Notify("설정이 저장되었습니다."); return Task.CompletedTask; });
+        ModeChangedCommand = new RelayCommand(_ => RefreshSelections());
+        ResetSettingsCommand = new RelayCommand(_ => { var defaults = new PreviewSettings(); foreach (var p in typeof(PreviewSettings).GetProperties().Where(p => p.CanWrite)) p.SetValue(Settings, p.GetValue(defaults)); Notify("기본값으로 변경했습니다. 저장하면 다음 실행에도 적용됩니다."); }, _ => CanEditSettings);
         ChooseOutputCommand = Async(_ => { PickFolder(false); return Task.CompletedTask; }, _ => !IsRunning);
         ChooseToolsCommand = Async(_ => { PickFolder(true); return Task.CompletedTask; }, _ => !IsRunning);
         OpenOutputCommand = Async(_ => { OpenFolder(Settings.OutputFolder); return Task.CompletedTask; });
         OpenLogsCommand = Async(_ => { OpenFolder(log.DirectoryPath); return Task.CompletedTask; });
-        CheckToolsCommand = Async(_ => CheckToolsAsync());
+        CheckToolsCommand = Async(_ => Tools.CheckAsync(Settings.ToolFolder), _ => !applyingUpdate && !Tools.IsPreparing && !Tools.IsChecking);
+        InstallToolsCommand = Async(_ => InstallToolsAsync(), _ => CanEditSettings && !Tools.IsChecking && ActiveCount == 0 && ItemSettings == null);
+        CancelToolSetupCommand = new RelayCommand(_ => Tools.Cancel(), _ => Tools.IsPreparing);
         SaveListCommand = Async(_ => SaveListAsync());
         LoadListCommand = Async(_ => LoadListAsync());
         EditItemCommand = new RelayCommand(p => ItemSettings = new ItemSettingsViewModel((DownloadItemViewModel)p!, Settings, backend, lifetime.Token),
@@ -137,6 +165,51 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         CloseItemCommand = Async(_ => CloseItemSettingsAsync());
         CopyItemUrlCommand = Async(_ => { Clipboard.SetText(ItemSettings!.Item.Url); Notify("영상 주소를 복사했습니다."); return Task.CompletedTask; }, _ => ItemSettings != null);
         OpenItemUrlCommand = Async(_ => { Process.Start(new ProcessStartInfo(ItemSettings!.Item.Url) { UseShellExecute = true }); return Task.CompletedTask; }, _ => ItemSettings != null);
+        OpenFileCommand = Async(p => { OpenCompletedFile((DownloadItemViewModel)p!, false); return Task.CompletedTask; }, p => p is DownloadItemViewModel { HasOutput: true });
+        RevealFileCommand = Async(p => { OpenCompletedFile((DownloadItemViewModel)p!, true); return Task.CompletedTask; }, p => p is DownloadItemViewModel { HasOutput: true });
+        RemoveSelectedCommand = Async(async p => { var selected = Selected(p).Where(i => RemoveCommand.CanExecute(i)).ToArray(); foreach (var i in selected) i.IsRemoving = true; if (Motion.Enabled) await Task.Delay(160, lifetime.Token); foreach (var i in selected) Items.Remove(i); }, p => Selected(p).Any(i => RemoveCommand.CanExecute(i)));
+        CancelSelectedCommand = new RelayCommand(p => { foreach (var item in Selected(p)) Cancel(item); });
+        MoveUpCommand = new RelayCommand(p => MoveSelected(p, -1), p => CanMoveSelected(p, -1));
+        MoveDownCommand = new RelayCommand(p => MoveSelected(p, 1), p => CanMoveSelected(p, 1));
+    }
+
+    private static DownloadItemViewModel[] Selected(object? value) => value is System.Collections.IList list ? list.Cast<DownloadItemViewModel>().ToArray() : [];
+    private bool CanMoveSelected(object? value, int direction)
+    {
+        if (IsRunning || Tools.IsPreparing || Items.Any(i => i.IsRemoving)) return false;
+        var selected = Selected(value).ToHashSet();
+        for (int i = 0; i < Items.Count; i++) {
+            int next = i + direction;
+            if (next >= 0 && next < Items.Count && selected.Contains(Items[i]) && !selected.Contains(Items[next])) return true;
+        }
+        return false;
+    }
+    private void MoveSelected(object? value, int direction)
+    {
+        if (!CanMoveSelected(value, direction)) return;
+        var selected = Selected(value).ToHashSet();
+        for (int i = direction < 0 ? 1 : Items.Count - 2; i >= 0 && i < Items.Count; i -= direction) {
+            int next = i + direction;
+            if (next >= 0 && next < Items.Count && selected.Contains(Items[i]) && !selected.Contains(Items[next])) Items.Move(i, next);
+        }
+        CommandManager.InvalidateRequerySuggested();
+    }
+    private static void OpenCompletedFile(DownloadItemViewModel item, bool reveal)
+    {
+        if (!File.Exists(item.OutputPath)) throw new FileNotFoundException("저장 파일을 찾을 수 없습니다. 이동하거나 삭제했는지 확인하세요.");
+        var info = new ProcessStartInfo(reveal ? "explorer.exe" : item.OutputPath!) { UseShellExecute = true };
+        if (reveal) info.ArgumentList.Add("/select," + item.OutputPath);
+        Process.Start(info);
+    }
+    private void SettingsChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(PreviewSettings.IsVideo)) {
+            Raise(nameof(Formats));
+            if (!Formats.Contains(Settings.Format)) Settings.Format = Settings.IsVideo ? "mp4" : "mp3";
+        }
+        if (e.PropertyName == nameof(PreviewSettings.ReduceMotion)) Motion.ReduceMotion = Settings.ReduceMotion;
+        foreach (string name in new[] { nameof(SelectedMode), nameof(SelectedFormat), nameof(SelectedHeight), nameof(SettingsStatus), nameof(FileNamePreview) }) Raise(name);
+        if (e.PropertyName is nameof(PreviewSettings.IsVideo) or nameof(PreviewSettings.Format) or nameof(PreviewSettings.Height) or nameof(PreviewSettings.AudioBitrate)) RefreshSelections();
     }
 
     private AsyncCommand Async(Func<object?, Task> action, Func<object?, bool>? can = null) => new(p => TrackAsync(action(p)), ReportError, can);
@@ -188,10 +261,11 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public Task StartAsync() => StartItemsAsync(Items.Where(i => i.State == DownloadState.Ready && !i.IsRemoving).ToArray());
     private async Task StartItemsAsync(DownloadItemViewModel[] ready)
     {
-        if (IsRunning) return;
+        if (IsRunning || Tools.IsPreparing) return;
         Settings.Validate();
         if (ready.Length == 0) return;
         var snapshot = JsonSerializer.Deserialize<PreviewSettings>(JsonSerializer.Serialize(Settings))!;
+        Toast = "";
         IsRunning = true;
         try
         {
@@ -234,6 +308,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public async Task RetryAsync(DownloadItemViewModel item)
     {
         if (IsRunning || item.CanCancel) return;
+        Toast = "";
         item.Error = ""; item.Percent = null;
         // Metadata failures must be queried again before a download request can be built.
         if (item.Metadata == null) { await LoadMetadataAsync(item); return; }
@@ -255,12 +330,14 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private void Fail(DownloadItemViewModel item, Exception ex)
     {
         item.State = DownloadState.Failed;
-        item.Error = RecoveryPolicy.Message(RecoveryPolicy.Classify(ex.InnerException ?? ex)) + "\n\n" + DiagnosticLog.Redact(ex.Message);
+        item.ErrorKind = RecoveryPolicy.Classify(ex.InnerException ?? ex);
+        item.Error = RecoveryPolicy.Message(item.ErrorKind) + "\n\n" + DiagnosticLog.Redact(ex.Message);
         item.Message = item.Error.Split('\n')[0]; log.Write("preview", item.Error);
     }
-    public void ReportError(Exception ex) { log.Write("preview", ex.ToString()); Notify(ex.Message); }
+    public void ReportError(Exception ex) { log.Write("preview", ex.ToString()); Notify(DiagnosticLog.Redact(ex.Message)); }
     public async void Notify(string message)
     {
+        if (disposed) return;
         int sequence = ++toastSequence; Toast = message;
         try { await Task.Delay(6500, lifetime.Token); if (sequence == toastSequence) Toast = ""; }
         catch (OperationCanceledException) { }
@@ -270,6 +347,10 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     {
         if (e.OldItems != null) foreach (DownloadItemViewModel item in e.OldItems) item.PropertyChanged -= ItemChanged;
         if (e.NewItems != null) foreach (DownloadItemViewModel item in e.NewItems) item.PropertyChanged += ItemChanged;
+        int first = e.NewStartingIndex;
+        if (e.OldStartingIndex >= 0) first = first < 0 ? e.OldStartingIndex : Math.Min(first, e.OldStartingIndex);
+        int last = e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Move ? Math.Max(e.OldStartingIndex, e.NewStartingIndex) : Items.Count - 1;
+        for (int i = Math.Max(0, first); i <= last; i++) Items[i].QueueNumber = i + 1;
         RefreshSummary();
     }
     private void RefreshSummary()
@@ -280,7 +361,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         Application.Current.Dispatcher.BeginInvoke(DispatcherPriority.DataBind, () => {
             summaryPending = false;
             if (disposed) return;
-            foreach (string name in new[] { nameof(CompletedCount), nameof(FailedCount), nameof(ActiveCount), nameof(IsEmpty), nameof(Summary), nameof(OverallProgress) }) Raise(name);
+            foreach (string name in new[] { nameof(CompletedCount), nameof(FailedCount), nameof(ActiveCount), nameof(IsEmpty), nameof(Summary), nameof(OverallProgress), nameof(CompletionSummary) }) Raise(name);
             CommandManager.InvalidateRequerySuggested();
         });
     }
@@ -306,16 +387,58 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         Raise(nameof(Settings));
     }
     private static void OpenFolder(string path) { Directory.CreateDirectory(path); Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); }
-    public async Task CheckToolsAsync()
+    public async Task InitializeAsync()
     {
-        ToolReport = "도구 버전을 확인하는 중…";
-        var runner = new ProcessRunner();
-        string folder = Path.GetFullPath(Settings.ToolFolder);
-        var versions = await Task.WhenAll(new[] { "yt-dlp.exe", "ffmpeg.exe", "deno.exe" }.Select(async name => {
-            string? path = name == "deno.exe" ? ToolDiagnostics.ResolveDeno(folder) : Path.Combine(folder, name);
-            return $"{name}\n{(path == null ? "missing" : await ToolDiagnostics.VersionAsync(path, runner, lifetime.Token))}";
-        }));
-        ToolReport = folder + "\n\n" + string.Join("\n\n", versions) + "\n\nffprobe.exe · " + (File.Exists(Path.Combine(folder, "ffprobe.exe")) ? "설치됨" : "missing") + "\n\n안정판에서 도구를 업데이트한 후 다시 확인하세요.";
+        Task updates = Settings.CheckForAppUpdates ? Updates.CheckAsync() : Task.CompletedTask;
+        try { await TrackAsync(Tools.CheckAsync(Settings.ToolFolder)); if (Tools.Missing && !disposed) Panel = "Diagnostics"; }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { ReportError(ex); }
+        try {
+            string recovery = Path.Combine(store.DirectoryPath, "update-queue.json");
+            if (File.Exists(recovery) && !lifetime.IsCancellationRequested) {
+                await LoadListAsync(recovery);
+                File.Move(recovery, recovery + ".restored", true);
+                Notify("업데이트 전 목록의 링크와 옵션을 복원했습니다.");
+            }
+        }
+        catch (OperationCanceledException) { }
+        catch (Exception ex) { ReportError(ex); }
+        await updates;
+    }
+    private bool CanInstallAppUpdate() => !disposed && !applyingUpdate && !IsRunning && ActiveCount == 0 && !Tools.IsPreparing && !Tools.IsChecking && ItemSettings == null && !Items.Any(i => i.IsRemoving);
+    private async Task InstallAppUpdateAsync(string installer)
+    {
+        if (!CanInstallAppUpdate()) throw new InvalidOperationException("진행 중인 작업을 마친 뒤 업데이트하세요.");
+        applyingUpdate = true; Raise(nameof(IsWorkspaceEnabled)); Raise(nameof(CanEditSettings)); CommandManager.InvalidateRequerySuggested();
+        try {
+            store.Save(Settings); savedSettings = JsonSerializer.Serialize(Settings); Raise(nameof(SettingsStatus));
+            await SaveListAsync(Path.Combine(store.DirectoryPath, "update-queue.json"));
+            lifetime.Token.ThrowIfCancellationRequested();
+            var start = new ProcessStartInfo(installer) { UseShellExecute = true };
+            start.ArgumentList.Add("/SP-"); start.ArgumentList.Add("/NORESTART");
+            start.ArgumentList.Add("/DIR=" + Path.TrimEndingDirectorySeparator(AppContext.BaseDirectory));
+            using var process = Process.Start(start) ?? throw new InvalidOperationException("설치 프로그램을 열지 못했습니다.");
+            Application.Current.MainWindow?.Close();
+        }
+        finally { applyingUpdate = false; Raise(nameof(IsWorkspaceEnabled)); Raise(nameof(CanEditSettings)); CommandManager.InvalidateRequerySuggested(); }
+    }
+    private void ToolsChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        CommandManager.InvalidateRequerySuggested();
+        if (e.PropertyName != nameof(ToolWorkspaceViewModel.IsPreparing)) return;
+        Raise(nameof(CanEditSettings)); Raise(nameof(IsWorkspaceEnabled)); CommandManager.InvalidateRequerySuggested();
+    }
+    private async Task InstallToolsAsync()
+    {
+        string? folder = await Tools.PrepareAsync();
+        if (folder == null) return;
+        var snapshot = JsonSerializer.Deserialize<PreviewSettings>(JsonSerializer.Serialize(Settings))!;
+        snapshot.ToolFolder = folder;
+        store.Save(snapshot);
+        Settings.ToolFolder = folder;
+        savedSettings = JsonSerializer.Serialize(Settings); Raise(nameof(SettingsStatus));
+        await Tools.CheckAsync(folder);
+        Notify("검증한 도구 묶음이 준비되었습니다. 링크를 추가하세요.");
     }
     private async Task SaveListAsync()
     {
@@ -372,6 +495,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public async Task StopAsync()
     {
         lifetime.Cancel(); CancelAll();
+        await Updates.StopAsync();
         await CloseItemSettingsAsync();
         await Task.WhenAll(operations.ToArray());
     }
@@ -379,6 +503,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     {
         if (disposed) return;
         disposed = true; lifetime.Cancel();
+        Settings.PropertyChanged -= SettingsChanged;
+        Tools.PropertyChanged -= ToolsChanged;
         Items.CollectionChanged -= ItemsChanged;
         foreach (var item in Items) item.PropertyChanged -= ItemChanged;
         lifetime.Dispose(); metadataSlots.Dispose();

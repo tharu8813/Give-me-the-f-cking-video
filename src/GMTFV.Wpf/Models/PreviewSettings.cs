@@ -1,20 +1,30 @@
 using System.IO;
 using GMTFV.Core;
+using GMTFV.Wpf.ViewModels;
 namespace GMTFV.Wpf.Models;
 
-public sealed class PreviewSettings
+public sealed class PreviewSettings : ObservableObject
 {
-    public string OutputFolder { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads", "GMTFV");
-    public string ToolFolder { get; set; } = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GMTFV");
-    public bool IsVideo { get; set; } = true;
-    public string Format { get; set; } = "mp4";
-    public int Height { get; set; } = 1080;
-    public int Concurrency { get; set; } = 2;
-    public int AudioBitrate { get; set; } = 192;
-    public bool AllowQualityFallback { get; set; } = true;
-    public bool ReduceMotion { get; set; }
-    public string FileNameTemplate { get; set; } = "%title%_%id%";
-    public string VideoEncoder { get; set; } = "libx264";
+    private string outputFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), "Downloads", "GMTFV");
+    public string OutputFolder { get => outputFolder; set => Set(ref outputFolder, value); }
+    private string toolFolder = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "GMTFV");
+    public string ToolFolder { get => toolFolder; set => Set(ref toolFolder, value); }
+    private bool isVideo = true;
+    public bool IsVideo { get => isVideo; set => Set(ref isVideo, value); }
+    private string format = "mp4";
+    public string Format { get => format; set => Set(ref format, value); }
+    private int height = 1080, concurrency = 2, audioBitrate = 192;
+    public int Height { get => height; set => Set(ref height, value); }
+    public int Concurrency { get => concurrency; set => Set(ref concurrency, value); }
+    public int AudioBitrate { get => audioBitrate; set => Set(ref audioBitrate, value); }
+    private bool allowQualityFallback = true, reduceMotion;
+    public bool AllowQualityFallback { get => allowQualityFallback; set => Set(ref allowQualityFallback, value); }
+    public bool ReduceMotion { get => reduceMotion; set => Set(ref reduceMotion, value); }
+    private bool checkForAppUpdates = true;
+    public bool CheckForAppUpdates { get => checkForAppUpdates; set => Set(ref checkForAppUpdates, value); }
+    private string fileNameTemplate = "%title%_%id%", videoEncoder = "libx264";
+    public string FileNameTemplate { get => fileNameTemplate; set => Set(ref fileNameTemplate, value); }
+    public string VideoEncoder { get => videoEncoder; set => Set(ref videoEncoder, value); }
     public void Validate()
     {
         if (!Path.IsPathFullyQualified(OutputFolder) || !Path.IsPathFullyQualified(ToolFolder)) throw new ArgumentException("저장 폴더와 도구 폴더는 전체 경로로 입력하세요.");

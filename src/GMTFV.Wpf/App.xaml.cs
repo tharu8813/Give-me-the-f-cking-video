@@ -8,7 +8,7 @@ namespace GMTFV.Wpf;
 
 public partial class App : Application
 {
-    protected override void OnStartup(StartupEventArgs e)
+    protected override async void OnStartup(StartupEventArgs e)
     {
         base.OnStartup(e);
         var store = new SettingsStore();
@@ -17,5 +17,6 @@ public partial class App : Application
         Motion.ReduceMotion = viewModel.Settings.ReduceMotion;
         MainWindow = new MainWindow(viewModel);
         MainWindow.Show();
+        await viewModel.InitializeAsync();
     }
 }

@@ -1,5 +1,8 @@
+> **4.0.0.0 전환 후 안내:** 아래는 이전 개발 단계의 기록입니다. 현재는 WinForms를 제거하고 WPF를 정식 앱으로 배포하며 앱 자동 업데이트를 제공합니다. 최신 구성과 검증은 [4.0 릴리즈 기록](release-4.0.0.0.md)과 [README](../README.md)를 참고하세요.
+
 # WinForms 기능 대조 및 WPF UI 안정화
 
+> 아래는 리워크 이전 기능 대조와 UI 안정화 기록입니다. 이번 리워크에서 도구 설치/업데이트, 다중 선택 작업, 기본값 복원, 파일명 미리보기, 설정 저장 상태 표시를 추가했습니다. 최신 구현·남은 기능은 [리워크 보고서](wpf-rework.md)를 참고하세요.
 점검일: 2026-10-18. 기준은 현재 저장소의 WinForms 안정판 소스와 WPF다. 원래 WPF 지시서의 체크리스트와 별도로, 안정판에서 사용자가 실제로 할 수 있던 작업을 대조했다.
 
 ## 안정판에 있고 WPF에 빠졌거나 축소된 기능
@@ -31,11 +34,11 @@ WinForms 설정 가져오기는 사용자 요청으로 앞선 작업에서 삭�
 
 ### 안정판 근거
 
-- 영상별 옵션·자막·URL 작업: [Videoinfoform.cs](../src/GMTFV.WinForms/Start/Videoinfoform.cs), 상세창 진입: [MainForm.cs](../src/GMTFV.WinForms/Start/MainForm.cs).
-- 앱 내 미리보기: [AddURL.cs](../src/GMTFV.WinForms/Start/AddURL.cs), [Videocheckcs.cs](../src/GMTFV.WinForms/Start/Videocheckcs.cs).
-- 목록 옵션 보존: [PlaylistDataMapper.cs](../src/GMTFV.WinForms/services/PlaylistDataMapper.cs), [PlaylistManager.cs](../src/GMTFV.WinForms/tools/PlaylistManager.cs).
-- 기본값 복원·미리보기·미저장 확인: [Setting.cs](../src/GMTFV.WinForms/Start/Setting.cs).
-- Chrome/파일 드롭/다중 선택/키보드/도구 준비/업데이트: [MainForm.cs](../src/GMTFV.WinForms/Start/MainForm.cs).
+- 영상별 옵션·자막·URL 작업: [Videoinfoform.cs](https://github.com/tharu8813/Give-me-the-f-cking-video/blob/587f82beac7154ef0ce5916a2805b14507453de2/src/GMTFV.WinForms/Start/Videoinfoform.cs), 상세창 진입: [MainForm.cs](https://github.com/tharu8813/Give-me-the-f-cking-video/blob/587f82beac7154ef0ce5916a2805b14507453de2/src/GMTFV.WinForms/Start/MainForm.cs).
+- 앱 내 미리보기: [AddURL.cs](https://github.com/tharu8813/Give-me-the-f-cking-video/blob/587f82beac7154ef0ce5916a2805b14507453de2/src/GMTFV.WinForms/Start/AddURL.cs), [Videocheckcs.cs](https://github.com/tharu8813/Give-me-the-f-cking-video/blob/587f82beac7154ef0ce5916a2805b14507453de2/src/GMTFV.WinForms/Start/Videocheckcs.cs).
+- 목록 옵션 보존: [PlaylistDataMapper.cs](https://github.com/tharu8813/Give-me-the-f-cking-video/blob/587f82beac7154ef0ce5916a2805b14507453de2/src/GMTFV.WinForms/services/PlaylistDataMapper.cs), [PlaylistManager.cs](https://github.com/tharu8813/Give-me-the-f-cking-video/blob/587f82beac7154ef0ce5916a2805b14507453de2/src/GMTFV.WinForms/tools/PlaylistManager.cs).
+- 기본값 복원·미리보기·미저장 확인: [Setting.cs](https://github.com/tharu8813/Give-me-the-f-cking-video/blob/587f82beac7154ef0ce5916a2805b14507453de2/src/GMTFV.WinForms/Start/Setting.cs).
+- Chrome/파일 드롭/다중 선택/키보드/도구 준비/업데이트: [MainForm.cs](https://github.com/tharu8813/Give-me-the-f-cking-video/blob/587f82beac7154ef0ce5916a2805b14507453de2/src/GMTFV.WinForms/Start/MainForm.cs).
 
 ## 재현하고 수정한 UI 문제
 

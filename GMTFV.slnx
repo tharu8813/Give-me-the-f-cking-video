@@ -1,5 +1,4 @@
 <Solution>
-  <Project Path="src/GMTFV.WinForms/GMTFV.WinForms.csproj" Id="8b7adc54-baf1-4f91-abae-6dc71ef71536" />
   <Folder Name="/src/">
     <Project Path="src/GMTFV.Wpf/GMTFV.Wpf.csproj" />
   </Folder>

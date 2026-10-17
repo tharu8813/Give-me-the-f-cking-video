@@ -19,8 +19,11 @@ public sealed class SettingsStore(string? directory = null)
         settings.Validate();
         Directory.CreateDirectory(DirectoryPath);
         string path = Path.Combine(DirectoryPath, "settings.json");
-        string temp = path + ".tmp";
-        File.WriteAllText(temp, JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true }));
-        File.Move(temp, path, true);
+        string temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try {
+            File.WriteAllText(temp, JsonSerializer.Serialize(settings, new JsonSerializerOptions { WriteIndented = true }));
+            File.Move(temp, path, true);
+        }
+        finally { if (File.Exists(temp)) File.Delete(temp); }
     }
 }

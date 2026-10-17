@@ -1,16 +1,35 @@
-<UserControl x:Class="GMTFV.Wpf.Views.QueueView" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:GMTFV.Wpf.Views" xmlns:s="clr-namespace:GMTFV.Wpf.Services">
-  <Grid>
-    <ListBox ItemsSource="{Binding Items}" Foreground="{DynamicResource TextBrush}" Background="{DynamicResource PanelBrush}" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.CanContentScroll="True" VirtualizingPanel.ScrollUnit="Pixel" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" AutomationProperties.Name="다운로드 큐">
-      <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Margin" Value="0" /><Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" /><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem"><Border x:Name="Container" BorderThickness="2,0,0,0" BorderBrush="Transparent"><ContentPresenter /></Border><ControlTemplate.Triggers><Trigger Property="IsSelected" Value="True"><Setter TargetName="Container" Property="BorderBrush" Value="{DynamicResource AccentBrush}" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style></ListBox.ItemContainerStyle>
-      <ListBox.ItemTemplate><DataTemplate><local:DownloadItemView /></DataTemplate></ListBox.ItemTemplate>
-    </ListBox>
-    <Border Background="{DynamicResource PanelBrush}" s:Motion.Present="{Binding IsEmpty}" Padding="24">
-      <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="430">
-
-        <TextBlock Text="다운로드할 영상을 추가하세요." FontSize="20" FontWeight="SemiBold" HorizontalAlignment="Center" />
-        <TextBlock Text="YouTube 주소를 입력하거나 이곳으로 끌어다 놓으세요.&#10;영상 정보를 확인한 후 원하는 형식으로 저장할 수 있습니다." TextAlignment="Center" Foreground="{DynamicResource MutedBrush}" LineHeight="24" Margin="0,10,0,16" />
-        <TextBlock Text="URL → 정보 확인 → 다운로드" Style="{StaticResource Eyebrow}" HorizontalAlignment="Center" />
-      </StackPanel>
+<UserControl x:Class="GMTFV.Wpf.Views.QueueView" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:local="clr-namespace:GMTFV.Wpf.Views" xmlns:s="clr-namespace:GMTFV.Wpf.Services" PreviewKeyDown="QueueKeyDown">
+ <Grid>
+  <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="*" /></Grid.RowDefinitions>
+  <Grid Height="40" Margin="0,18,0,12">
+   <Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions>
+   <StackPanel Orientation="Horizontal" VerticalAlignment="Center"><TextBlock Text="내 다운로드" FontSize="20" FontWeight="SemiBold" /><TextBlock Text="{Binding Items.Count, StringFormat='  {0}'}" FontSize="20" Foreground="{DynamicResource AccentBrush}" Margin="8,0,0,0" /><TextBlock Text="{Binding ActiveCount, StringFormat='  ·  {0}개 작업 중'}" Style="{StaticResource Caption}" Margin="8,6,0,0" /></StackPanel>
+   <Grid Grid.Column="1">
+    <StackPanel Orientation="Horizontal"><StackPanel.Style><Style TargetType="StackPanel"><Setter Property="Visibility" Value="Collapsed" /><Style.Triggers><DataTrigger Binding="{Binding SelectedItems.Count, ElementName=QueueList}" Value="0"><Setter Property="Visibility" Value="Visible" /></DataTrigger></Style.Triggers></Style></StackPanel.Style><Button Content="목록 열기" Command="{Binding LoadListCommand}" Style="{StaticResource QuietButton}" /><Button Content="목록 저장" Command="{Binding SaveListCommand}" Style="{StaticResource QuietButton}" Margin="4,0" /><Button Content="실패 재시도" Command="{Binding RetryFailedCommand}" Style="{StaticResource QuietButton}" /></StackPanel>
+    <Border x:Name="SelectionBar" s:Motion.Kind="Scrim" s:Motion.Present="{Binding SelectedItems.Count, ElementName=QueueList, Converter={StaticResource HasSelection}}">
+     <StackPanel Orientation="Horizontal">
+      <TextBlock Text="{Binding SelectedItems.Count, ElementName=QueueList, StringFormat={}{0}개 선택}" VerticalAlignment="Center" Foreground="{DynamicResource MutedBrush}" Margin="0,0,12,0" />
+      <Button Command="{Binding MoveUpCommand}" CommandParameter="{Binding SelectedItems, ElementName=QueueList}" Style="{StaticResource IconButton}" ToolTip="위로 이동 · Alt+↑" AutomationProperties.Name="선택한 항목 위로 이동"><Path Data="{StaticResource Icon.Up}" Style="{StaticResource VectorIcon}" /></Button>
+      <Button Command="{Binding MoveDownCommand}" CommandParameter="{Binding SelectedItems, ElementName=QueueList}" Style="{StaticResource IconButton}" Margin="4,0,8,0" ToolTip="아래로 이동 · Alt+↓" AutomationProperties.Name="선택한 항목 아래로 이동"><Path Data="{StaticResource Icon.Down}" Style="{StaticResource VectorIcon}" /></Button>
+      <Button Content="작업 취소" Command="{Binding CancelSelectedCommand}" CommandParameter="{Binding SelectedItems, ElementName=QueueList}" Style="{StaticResource QuietButton}" />
+      <Button Content="목록에서 제거" Command="{Binding RemoveSelectedCommand}" CommandParameter="{Binding SelectedItems, ElementName=QueueList}" Style="{StaticResource QuietButton}" />
+      <Button Click="ClearSelection" Style="{StaticResource IconButton}" ToolTip="선택 해제 · Esc" AutomationProperties.Name="선택 해제"><Path Data="{StaticResource Icon.Close}" Style="{StaticResource VectorIcon}" /></Button>
+     </StackPanel>
     </Border>
+   </Grid>
   </Grid>
+  <ListBox Grid.Row="1" x:Name="QueueList" SelectionChanged="QueueSelectionChanged" ItemsSource="{Binding Items}" SelectionMode="Extended" Foreground="{DynamicResource TextBrush}" Background="{DynamicResource BackgroundBrush}" BorderThickness="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" ScrollViewer.CanContentScroll="True" VirtualizingPanel.ScrollUnit="Pixel" VirtualizingPanel.IsVirtualizing="True" VirtualizingPanel.VirtualizationMode="Recycling" s:QueueMotion.Enabled="True" AutomationProperties.Name="다운로드 큐" ToolTip="Ctrl 또는 Shift로 여러 영상 선택 · Alt+↑/↓로 순서 변경 · Delete로 목록에서 제거">
+   <ListBox.ContextMenu><ContextMenu DataContext="{Binding PlacementTarget, RelativeSource={RelativeSource Self}}" Background="{DynamicResource PanelBrush}" Foreground="{DynamicResource TextBrush}"><MenuItem Header="위로 이동" InputGestureText="Alt+↑" Command="{Binding DataContext.MoveUpCommand}" CommandParameter="{Binding SelectedItems}" /><MenuItem Header="아래로 이동" InputGestureText="Alt+↓" Command="{Binding DataContext.MoveDownCommand}" CommandParameter="{Binding SelectedItems}" /><MenuItem Header="선택한 항목 취소" Command="{Binding DataContext.CancelSelectedCommand}" CommandParameter="{Binding SelectedItems}" /><MenuItem Header="선택한 항목 제거 (파일 유지)" Command="{Binding DataContext.RemoveSelectedCommand}" CommandParameter="{Binding SelectedItems}" /></ContextMenu></ListBox.ContextMenu>
+   <ListBox.ItemContainerStyle><Style TargetType="ListBoxItem"><Setter Property="HorizontalContentAlignment" Value="Stretch" /><Setter Property="Padding" Value="0" /><Setter Property="Margin" Value="0,0,0,8" /><Setter Property="FocusVisualStyle" Value="{StaticResource FocusRing}" /><Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ListBoxItem"><Border x:Name="Container" CornerRadius="{StaticResource CardRadius}" BorderThickness="1" BorderBrush="Transparent"><ContentPresenter /></Border><ControlTemplate.Triggers><Trigger Property="IsSelected" Value="True"><Setter TargetName="Container" Property="BorderBrush" Value="{DynamicResource AccentBrush}" /></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter></Style></ListBox.ItemContainerStyle>
+   <ListBox.ItemTemplate><DataTemplate><local:DownloadItemView /></DataTemplate></ListBox.ItemTemplate>
+  </ListBox>
+  <Border Grid.Row="1" Background="{DynamicResource BackgroundBrush}" s:Motion.Present="{Binding IsEmpty}" Padding="24">
+   <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center" MaxWidth="480">
+    <Border Width="68" Height="48" CornerRadius="10" Background="{DynamicResource PanelBrush}" HorizontalAlignment="Center" Margin="0,0,0,20"><Path Data="{StaticResource Icon.Link}" Width="26" Height="26" Stretch="Uniform" Stroke="{DynamicResource AccentBrush}" StrokeThickness="1.5" HorizontalAlignment="Center" VerticalAlignment="Center" /></Border>
+    <TextBlock Text="링크 하나로 시작하세요" FontSize="{StaticResource DisplaySize}" FontWeight="SemiBold" HorizontalAlignment="Center" />
+    <TextBlock Text="위에 YouTube 주소를 붙여넣으면 영상 정보를 확인합니다.&#10;형식과 저장 위치를 고른 뒤 다운로드를 시작하세요." TextAlignment="Center" Foreground="{DynamicResource MutedBrush}" LineHeight="24" Margin="0,12,0,20" />
+    <StackPanel Orientation="Horizontal" HorizontalAlignment="Center"><TextBlock Text="1  링크 추가" Foreground="{DynamicResource AccentBrush}" /><Path Data="M0,0 L28,0" Stroke="{DynamicResource LineBrush}" Width="28" Margin="16,8" /><TextBlock Text="2  옵션 확인" Foreground="{DynamicResource MutedBrush}" /><Path Data="M0,0 L28,0" Stroke="{DynamicResource LineBrush}" Width="28" Margin="16,8" /><TextBlock Text="3  내 폴더에 저장" Foreground="{DynamicResource MutedBrush}" /></StackPanel>
+   </StackPanel>
+  </Border>
+ </Grid>
 </UserControl>

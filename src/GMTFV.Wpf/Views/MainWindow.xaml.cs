@@ -24,7 +24,7 @@ public partial class MainWindow : Window
             // Windows 10 keeps system chrome; these documented caption attributes require Windows 11.
             if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000)) return;
             IntPtr handle = new WindowInteropHelper(this).Handle;
-            int dark = 1, caption = 0x161310, text = 0xF0F5F3;
+            int dark = 1, caption = 0x161717, text = 0xE7F0F4;
             DwmSetWindowAttribute(handle, 20, ref dark, sizeof(int));
             DwmSetWindowAttribute(handle, 35, ref caption, sizeof(int));
             DwmSetWindowAttribute(handle, 36, ref text, sizeof(int));
@@ -87,6 +87,7 @@ public partial class MainWindow : Window
     }
     private void ClosePanel(object sender, MouseButtonEventArgs e) => ViewModel.Panel = "";
     private void CloseFailure(object sender, RoutedEventArgs e) => ViewModel.Failure = null;
+    private void RetryFailure(object sender, RoutedEventArgs e) => Dispatcher.BeginInvoke(() => ViewModel.Failure = null);
     private async void WindowClosing(object? sender, CancelEventArgs e)
     {
         if (closeAllowed) return;

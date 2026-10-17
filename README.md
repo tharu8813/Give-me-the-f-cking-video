@@ -1,105 +1,82 @@
-<p align="center"><img src="icon.ico" alt="GMTFV" width="150"></p>
+<p align="center"><img src="assets/branding/app-icon.png" alt="GMTFV — 재생 모양을 품은 다운로드 화살표" width="128"></p>
 
-# GMTFV (야발아 동영상 내와)
+<h1 align="center">GMTFV 4.0</h1>
+<p align="center">링크를 넣고, 옵션을 고르고, 내 폴더에 저장하세요.</p>
+<p align="center"><a href="https://github.com/tharu8813/Give-me-the-f-cking-video/releases/latest">최신 릴리즈 다운로드</a> · <a href="docs/architecture.md">구조 안내</a> · <a href="THIRD-PARTY-NOTICES.md">제3자 라이선스</a></p>
 
-[yt-dlp](https://github.com/yt-dlp/yt-dlp) 기반 YouTube 영상·오디오 다운로드 프로그램. **WinForms (.NET Framework 4.7.2)**를 공식 애플리케이션으로 유지한다.
+GMTFV (Give Me The F*cking Video)는 [yt-dlp](https://github.com/yt-dlp/yt-dlp) 기반 YouTube 영상·오디오 다운로드 앱입니다. **4.0.0.0부터 .NET 10 / WPF가 정식 앱**이며 WinForms는 제거했습니다. 살구색 타일과 재생 모양을 품은 다운로드 화살표가 새 아이콘입니다. 앱·설치 프로그램·README에 같은 [아이콘 원본](assets/branding)을 사용합니다.
 
-[최신 릴리스](https://github.com/tharu8813/Give-me-the-f-cking-video/releases/latest) · [구조 안내](docs/architecture.md) · [제3자 라이선스](THIRD-PARTY-NOTICES.md)
+## 설치와 실행
 
-## 주요 기능
+**Windows 10/11 x64** 및 인터넷 연결이 필요합니다. 공식 설치본과 ZIP에는 .NET 10 Desktop Runtime이 포함되어 있어 별도 런타임 설치가 필요하지 않습니다.
 
-- 여러 URL 붙여넣기, Enter로 추가, 드래그 앤 드롭, 중복 영상 감지
-- 영상/오디오·화질/FPS·형식·파일명 템플릿·동시 다운로드 설정
-- 썸네일·채널·길이·선택 옵션·상태 표시, 자막 다운로드, JSON/TXT 목록 저장·복원
-- 전체/선택 작업 취소, 실패 항목만 재시도, 오류별 제한된 자동 복구
-- 불필요한 영상 재인코딩 방지, 완료 파일 검증, 동일 이름 파일 보존, 진단 로그
+- **설치본:** [GMTFV-4.0.0.0-setup.exe](https://github.com/tharu8813/Give-me-the-f-cking-video/releases/download/4.0.0.0/GMTFV-4.0.0.0-setup.exe)를 실행합니다.
+- **ZIP:** [GMTFV-4.0.0.0-win-x64.zip](https://github.com/tharu8813/Give-me-the-f-cking-video/releases/download/4.0.0.0/GMTFV-4.0.0.0-win-x64.zip)을 새 폴더에 모두 풀고 `GMTFV.Wpf.exe`를 실행합니다.
+- 첫 실행에 도구가 없으면 **도구 및 진단 → 도구 준비**를 선택합니다. yt-dlp·FFmpeg/ffprobe·Deno를 공식 배포처에서 받아 SHA-256을 검증합니다. 설치 실패 시 앱을 계속 사용할 수 있고 다시 준비할 수 있습니다.
 
-## 요구 사항과 도구
-
-Windows 10/11 x64 및 .NET Framework 4.7.2 이상, 인터넷 연결이 필요하다. 선택적인 웹 미리보기에는 Microsoft Edge WebView2 Runtime이 필요하다.
-
-도구는 기본적으로 `%AppData%/GMTFV`에서 관리한다. 기존 위치·설정·목록 형식을 유지한다.
-
-| 도구 | 용도 |
-| --- | --- |
-| 공식 yt-dlp Windows x64 실행 파일 | 영상·포맷·자막 조회, 다운로드. EJS 번들 포함 |
-| FFmpeg + ffprobe | 스트림 병합·컨테이너 변경·오디오 추출·변환 |
-| Deno 2.3.0 이상 | YouTube JavaScript 실행. 도구 폴더 또는 PATH에서 검색 |
-
-첫 실행 시 FFmpeg/ffprobe 설치를 안내하고 yt-dlp와 누락되거나 호환되지 않는 Deno를 공식 배포처에서 준비한다. 다운로드는 체크섬 검증 후 반영한다. 기존 yt-dlp가 있으면 먼저 사용할 수 있게 하고 버전 확인은 뒤에서 한다. 도구 준비 실패로 앱을 강제 종료하지 않는다.
+기존 3.x 설치본과 같은 설치 식별자를 사용하며 바로가기는 WPF로 연결됩니다. 사용자의 설정·도구·다운로드 파일을 삭제하지 않습니다. 기존 WinForms 설정을 WPF로 가져오는 기능은 제공하지 않습니다. 구버전이 필요하면 [3.6.0.0 릴리즈](https://github.com/tharu8813/Give-me-the-f-cking-video/releases/tag/3.6.0.0)를 이용하세요.
 
 ## 사용법
 
-1. 설정에서 저장 폴더와 영상/오디오·형식·화질을 고른다. 기본값은 MP4, CPU, 동시 1개다.
-2. `새 영상`에 URL을 붙여넣고 Enter를 누른다. 여러 URL은 줄바꿈으로 구분한다. 메인 화면 Ctrl+V와 드래그 앤 드롭도 지원한다.
-3. `다운로드 시작`을 누른다. 다운로드·병합·변환·검증 상태를 확인한다. 측정할 수 없는 진행률은 움직이는 막대로 표시한다.
-4. 목록 우클릭에서 실패 항목 재시도, 정보 조회 재시도, 선택 항목 취소, 로그 폴더 열기를 사용한다. 실패 이유는 행 오류 표시와 툴팁에서도 볼 수 있다.
+1. 위쪽 입력란에 YouTube 링크를 붙여넣고 Enter 또는 **영상 추가**를 누릅니다. 여러 링크·텍스트 드롭·JSON/TXT 목록 파일 드롭을 지원하며 중복을 제거합니다.
+2. 같은 화면에서 **영상/오디오·형식·화질·저장 위치**를 고릅니다. 각 영상의 **옵션·자막**에서 실제 제공 해상도/FPS, 영상별 설정, 일반·자동 자막을 선택합니다.
+3. **다운로드 시작**을 누릅니다. 대기·다운로드·병합·변환·복구·검증 상태를 표시하며, 계산할 수 없는 진행률이나 ETA를 만들지 않습니다.
+4. 완료된 행에서 파일을 열거나 폴더에서 확인합니다. 실패한 행의 문제 해결 안내에서 재시도와 진단 정보를 확인합니다.
 
-고급 설정에는 GPU(AVI/FLV 재인코딩에만 적용), 오디오 비트레이트, 동시 다운로드 수, 화질 폴백 허용이 있다. 폴백은 요청 해상도를 넘지 않으며 끄면 선택 해상도/FPS가 없을 때 실패로 표시한다.
+목록 왼쪽 번호는 현재 순서입니다. 항목을 선택한 뒤 **위·아래 버튼**, 우클릭 메뉴 또는 **Alt+↑/↓**로 순서를 바꿉니다. Ctrl/Shift 다중 선택도 내부 순서를 유지하며 함께 이동합니다. 다운로드 중에는 순서 변경을 잠급니다. Esc는 열린 패널을 닫거나 선택을 해제하고, Delete는 선택 항목을 목록에서만 제거합니다. 파일은 삭제하지 않습니다.
 
-파일명은 기존 `%title%`, `%author%`, `%id%`, `%date%`, `%num%`, `%num2%`, `%num3%`, `%ext%` 등을 지원한다. `%title%.%ext%`는 확장자를 한 번만 붙인다. 동일 파일명은 `(1)`처럼 번호를 붙여 보존한다.
+**목록 저장/열기**로 순서를 보관합니다. JSON은 영상별 옵션도 저장하고 TXT는 URL만 저장합니다. 일반 종료 시 목록을 자동 저장하지 않으므로 필요한 목록은 직접 저장하세요.
 
-실패·취소 시 저장 폴더의 `.gmtfv-*` 작업 폴더를 보존한다. 같은 작업의 자동 재시도에서는 이어받으며 수동 재시도는 새 작업으로 시작한다. 작업 종료 후 필요 없는 임시 폴더를 직접 정리할 수 있다.
+## 설정과 모션
 
-## Chrome 탭 가져오기
+설정은 일반·다운로드·형식·고급·도구로 나뉩니다. 기본값을 따르는 영상에는 공통 설정을 적용하고 영상별 지정은 유지합니다. 변경한 기본 설정은 **설정 저장**으로 보관합니다.
 
-`Chrome 탭` 버튼을 누르면 확장 폴더가 열리고 `chrome://extensions/`가 복사된다. Chrome 주소창에 붙여넣고 개발자 모드를 켠 다음 **압축해제된 확장 프로그램을 로드합니다**에서 열린 `chrome-extension` 폴더를 선택한다. 확장 아이콘의 **YouTube 탭 가져오기**를 누르면 실행 중인 GMTFV에 추가된다. 주소는 루프백 포트 43128로만 전달한다. 다운로드 중 받은 새 URL은 중복을 제거해 대기시킨 뒤 작업 종료 후 추가한다.
+- 형식·해상도·FPS, 오디오 비트레이트, AVI/FLV 인코더, 동시 다운로드 수, 품질 폴백과 파일명 템플릿
+- `%title%`, `%author%`, `%id%`, `%date%`, `%num%`, `%num2%`, `%num3%`, `%ext%` 템플릿과 파일명 미리보기
+- 전체·선택 작업 취소, 실패 재시도, 제한된 자동 복구, 실제 완료 파일 검증과 같은 이름 파일 보존
+- 상태를 잇는 진행 모션, 카드 추가·제거·이동, 패널 전환, 부드러운 스크롤과 대량 목록 가상화
+- Windows 애니메이션 설정 반영 및 앱의 **모션 줄이기**
 
-## 빌드·테스트·설치본
+MP4/MKV/MOV/WebM은 불필요한 영상 재인코딩을 피합니다. AVI/FLV 변환에만 선택한 영상 인코더를 사용합니다. 품질 폴백은 요청 해상도를 넘지 않으며, 끄면 제공되지 않는 해상도/FPS는 실패로 표시합니다. 같은 이름은 `(1)` 등의 번호로 보존합니다. 실패·취소 시 `.gmtfv-*` 작업 폴더를 남겨 같은 작업의 자동 복구에서 이어받으며, 수동 재시도는 새 작업으로 시작합니다.
 
-Visual Studio의 .NET 데스크톱 개발 도구와 .NET Framework 4.7.2 targeting pack을 설치한다. `.slnx`를 지원하는 MSBuild로 루트에서 실행한다.
+## 앱 자동 업데이트
 
-```powershell
-msbuild GMTFV.slnx /t:Restore /p:RestorePackagesConfig=true /p:RestoreRepositoryPath=packages
-msbuild GMTFV.slnx /t:Build /p:Configuration=Debug
-.\tests\GMTFV.Tests\bin\Debug\GMTFV.Tests.exe
-msbuild GMTFV.slnx /t:Build /p:Configuration=Release
-.\tests\GMTFV.Tests\bin\Release\GMTFV.Tests.exe
-ISCC.exe setup_winform.iss
-```
+시작할 때 공식 GitHub의 최신 정식 릴리즈를 확인합니다. 새 버전이 있으면 상단 앱 정보 버튼에 표시합니다. **앱 정보 → 업데이트 다운로드 및 설치**를 선택하면 공식 설치본의 크기와 SHA-256을 검증한 뒤 설치 프로그램을 엽니다. 체크섬 누락·손상·다른 저장소의 주소·이전 버전은 설치하지 않습니다. 확인·다운로드 중 취소와 네트워크 오류 후 재시도를 지원합니다.
 
-WinForms 실행 파일은 `src/GMTFV.WinForms/bin/Release/GMTFV.exe`, 관리 라이브러리는 `src/GMTFV.WinForms/bin/Release/DLLs/`에 생성된다. `.exe.config`, `runtimes/`, 확장 ZIP과 라이선스 고지를 함께 배포한다. 확장 폴더는 빌드 시 동봉 ZIP에서 풀어 설치본에 포함한다. 설치본은 `output-setup/GMTFV-<버전>-setup.exe`로 생성된다. Core/DownloadEngine도 같은 .NET Framework를 사용한다.
+다운로드·영상 정보 조회·자막·도구 작업 중에는 설치할 수 없습니다. 설치 직전에 현재 설정과 목록의 링크·옵션을 저장하고 앱을 종료합니다. 다음 실행에서 목록을 복원하고 영상 정보를 다시 조회합니다. 완료·실패 상태나 진행 중 작업을 이어서 복원하는 기능은 아닙니다. 관리자 승인이 필요할 수 있으며, ZIP 실행도 현재 실행 폴더를 대상으로 설치 프로그램을 사용합니다.
 
-실제 도구가 준비되면 자체 생성 미디어로 로컬 통합 테스트를 할 수 있다. YouTube에 접속하지 않는다.
+설정 → 일반의 **시작할 때 앱 업데이트 확인**을 끄고 저장하면 자동 확인을 중단합니다. 수동 확인은 계속 사용할 수 있습니다. 외부 도구의 설치·업데이트는 **도구 및 진단**에서 별도로 관리합니다.
 
-```powershell
-python tests/media_smoke.py --tools-dir "$env:APPDATA\GMTFV"
-```
+## 데이터와 진단
 
-## 실패 시 확인
+- 기존 WPF 설정·로그 경로 `%LocalAppData%/GMTFV.Preview`는 호환성을 위해 유지합니다. 로그는 그 아래 `Logs/`에 기록하며 URL·인증값·사용자 홈 경로를 마스킹합니다.
+- 업데이트 전 목록은 같은 경로의 `update-queue.json`에 저장하고 복원 후 `update-queue.json.restored`로 보관합니다.
+- 기본 도구 경로는 기존 `%AppData%/GMTFV`입니다. 앱에서 설치하는 새 도구 묶음은 WPF 전용 `Tools/`에 별도로 만들고 공유 도구 실행 파일을 덮어쓰지 않습니다.
+- 네트워크 오류는 연결과 서비스 상태, 포맷 오류는 형식·화질, 병합 오류는 FFmpeg/ffprobe, 파일 오류는 권한·공간을 확인하세요. 앱의 실패 안내와 **도구 및 진단 → 로그**에서 자세한 정보를 볼 수 있습니다.
 
-- 네트워크/시간 초과: 제한된 자동 재시도 이후에도 실패하면 연결을 확인한다.
-- 403: 스트림 경로를 한 번 갱신한다. 계속 실패하면 yt-dlp 업데이트와 서비스 상태를 확인한다.
-- 429: 자동 반복을 중단한다. 충분히 기다린 뒤 다시 시도한다.
-- JavaScript/클라이언트: yt-dlp·Deno 호환 버전과 경로를 확인한다. [공식 EJS 안내](https://github.com/yt-dlp/yt-dlp/wiki/EJS)를 참고한다.
-- PO Token: 외부 플러그인 장애 시 플러그인 없는 기본 경로로 한 번 시도한다. 공급자 서버를 새로 실행하지 않는다.
-- 포맷: 다른 형식이나 화질을 고르거나 화질 폴백을 허용한다.
-- 병합/변환: ffmpeg.exe와 ffprobe.exe를 함께 준비한다. MKV를 선택해 볼 수 있다. GPU 변환 실패는 CPU로 한 번 복구한다.
-- 파일: 쓰기 권한·디스크 공간·폴더 길이·파일 사용 여부를 확인한다.
-- 비공개/삭제/접근 제한: 본인의 접근 권한과 영상 상태를 확인한다. 쿠키 자동 수집이나 접근 제한 우회는 제공하지 않는다.
+## 빌드·테스트·배포
 
-로그는 `%LocalAppData%/GMTFV/Logs`에 저장하며 URL·인증값·사용자 홈 경로를 마스킹한다. 현재 로그와 이전 로그 하나만 보관한다.
-
-## WPF (.NET 10)
-
-새 UI는 `src/GMTFV.Wpf`에 별도 앱으로 제공한다. 짙은 잉크색과 라임 포인트의 큐 중심 화면, 모션, 설정/진단 패널을 갖춘 MVVM 앱이다. WinForms 안정판과 동일한 Core/DownloadEngine 소스를 사용하며 실행 파일과 설정은 분리한다.
-
-Windows x64, .NET 10 SDK가 필요하다. Visual Studio에서 전체 솔루션을 빌드하려면 .NET Framework 4.7.2 targeting pack도 유지해야 한다.
+Windows x64와 .NET 10 SDK를 사용합니다. Core/DownloadEngine은 `net472` 호환 타깃도 유지하므로 **전체 솔루션** 빌드에는 .NET Framework 4.7.2 Developer Pack이 추가로 필요합니다. WPF 앱만 빌드하면 .NET 10 SDK로 충분합니다.
 
 ```powershell
-dotnet build src/GMTFV.Wpf/GMTFV.Wpf.csproj -c Debug -m:1 -p:BuildInParallel=false
-dotnet run --project src/GMTFV.Wpf/GMTFV.Wpf.csproj --no-build
-dotnet build tests/GMTFV.Wpf.Tests/GMTFV.Wpf.Tests.csproj -c Debug -m:1 -p:BuildInParallel=false
+dotnet build GMTFV.slnx -c Debug -m:1 -nr:false -p:UseSharedCompilation=false
+.\tests\GMTFV.Tests\bin\Debug\net10.0-windows\GMTFV.Tests.exe
 .\tests\GMTFV.Wpf.Tests\bin\Debug\net10.0-windows\GMTFV.Wpf.Tests.exe
-.\publish-wpf-preview.ps1
 ```
 
-배포 ZIP은 `artifacts/GMTFV-Wpf.zip`, 실행 파일은 `GMTFV.Wpf.exe`다. .NET 10 **Desktop Runtime**이 설치된 Windows에서 압축을 풀어 실행한다. 안정판 Inno Setup 설치본을 덮어쓰지 않는다.
+[Inno Setup 6](https://jrsoftware.org/isinfo.php)를 설치한 뒤 아래 명령으로 런타임 포함 ZIP·설치본·SHA-256 목록을 생성합니다. 앱 버전은 WPF 프로젝트에서 읽습니다.
 
-설정은 일반·다운로드·형식·고급·도구 탭으로 나뉜다. 각 영상 행의 설정 버튼에서 기본값 사용 여부, 영상/오디오, 형식과 실제 제공 화질/FPS를 지정하고 일반·자동 자막을 SRT로 저장할 수 있다. JSON 목록에는 영상별 설정도 보관하며 TXT에는 URL만 보관한다. 목록과 설정 패널에는 부드러운 휠 스크롤을 적용하고 Windows 애니메이션 설정과 모션 줄이기를 반영한다.
+```powershell
+.\publish.ps1
+# 다른 위치에 설치했다면: .\publish.ps1 -InnoCompiler 'D:\Inno Setup 6\ISCC.exe'
+```
 
-설정/로그는 기존 WPF 설정 보존을 위해 `%LocalAppData%/GMTFV.Preview` 경로를 유지한다. WPF 설정은 앱에서 별도로 구성하며 WinForms 설정 가져오기는 제공하지 않는다. 도구는 기본적으로 기존 `%AppData%/GMTFV`를 읽으며 도구 경로를 변경할 수 있다. WPF에는 자동 도구 설치/업데이트가 없으므로 안정판에서 도구를 준비하거나 직접 폴더를 지정한다. [구현 범위·검증·차이점](docs/wpf-preview.md)과 [WinForms 기능 대조·UI 안정화](docs/wpf-feature-parity.md)를 참고한다.
+출력은 `artifacts/GMTFV-4.0.0.0-win-x64.zip`, `output-setup/GMTFV-4.0.0.0-setup.exe`, `artifacts/GMTFV-4.0.0.0-SHA256SUMS.txt`입니다. 실제 도구가 있으면 `python tests/media_smoke.py --tools-dir <도구 폴더>`로 자체 생성 미디어와 로컬 서버를 사용하는 13개 형식 검사를 실행할 수 있습니다. YouTube 다운로드 성공을 대신 검증하는 테스트는 아닙니다.
+
+## 현재 범위
+
+Chrome 탭 가져오기와 앱 내 영상 재생은 4.0에 포함되지 않습니다. URL 입력·파일 목록 가져오기와 브라우저에서 영상 열기를 사용할 수 있습니다. 설계·기능별 구현 범위는 [리워크 보고서](docs/wpf-rework.md), 4.0 전환과 배포 검증은 [릴리즈 기록](docs/release-4.0.0.0.md)을 참고하세요.
 
 ## 라이선스
 
-GMTFV는 [GPL-3.0](LICENSE.txt)으로 배포한다. 외부 도구에는 각각의 [라이선스와 고지](THIRD-PARTY-NOTICES.md)가 적용된다. 다운로드 권한이 있는 콘텐츠에 사용한다.
+GMTFV는 [GPL-3.0](LICENSE.txt)으로 배포합니다. 외부 도구·라이브러리와 포함된 .NET 런타임에는 각각의 [라이선스와 고지](THIRD-PARTY-NOTICES.md)가 적용됩니다. 다운로드 권한이 있는 콘텐츠에 사용하세요.

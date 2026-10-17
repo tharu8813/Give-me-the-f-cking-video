@@ -22,11 +22,11 @@ def main():
     parser.add_argument("--tools-dir", type=Path, required=True)
     args = parser.parse_args()
     root = Path(__file__).resolve().parent
-    harness = root / "GMTFV.Tests/bin/Debug/GMTFV.Tests.exe"
+    harness = root / "GMTFV.Tests/bin/Debug/net10.0-windows/GMTFV.Tests.exe"
     ffmpeg = args.tools_dir / "ffmpeg.exe"
     yt = args.tools_dir / "yt-dlp.exe"
     assert harness.exists() and ffmpeg.exists() and yt.exists(), "Build the test harness and prepare the tools first"
-    output = root / "GMTFV.Tests/bin/Debug"
+    output = harness.parent
     with tempfile.TemporaryDirectory(prefix="media-smoke-", dir=output) as folder:
         work = Path(folder)
         for name, source, codec in [("video.mp4", "testsrc2=size=160x120:rate=30:duration=1", "libx264"),

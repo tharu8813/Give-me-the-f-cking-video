@@ -1,67 +1,61 @@
-# GMTFV 아키텍처
+# GMTFV 4.0 아키텍처
 
 ## 프로젝트
 
 ```text
-src/GMTFV.WinForms/GMTFV.WinForms.csproj (WinForms, net472)
-  ├─ src/GMTFV.Core (net472, UI·프로세스 의존성 없음)
-  └─ src/GMTFV.DownloadEngine (net472)
+src/GMTFV.Wpf (net10.0-windows, MVVM)
+  ├─ GMTFV.Core (net472;net10.0)
+  └─ GMTFV.DownloadEngine (net472;net10.0-windows)
        ├─ GMTFV.Core
-       └─ Newtonsoft.Json (기존 고정 버전)
-tests/GMTFV.Tests (콘솔 테스트, 추가 패키지 없음)
+       └─ Newtonsoft.Json 13.0.4 (PackageReference)
+tests/GMTFV.Tests (net10.0-windows, Core/Engine 회귀 검사)
+tests/GMTFV.Wpf.Tests (net10.0-windows, STA Dispatcher 검사)
+publish.ps1 → Windows x64 자체 포함 ZIP / setup.iss 설치본 / SHA-256 목록
 ```
 
-WinForms는 기존 net472 타깃을 유지한다. WPF를 위해 Core에 net10.0, DownloadEngine에 net10.0-windows 타깃을 추가했다. `src/GMTFV.Wpf`와 `tests/GMTFV.Wpf.Tests`는 .NET 10 WPF 앱/검사 프로젝트다. 기존 `Start/`, `Properties/` 경로와 사용자 설정 키, JSON/TXT 목록 스키마를 유지한다. WinForms의 `services/` 어댑터는 썸네일 Image를 포함한 기존 VideoInfo를 UI 독립 DownloadRequest로 변환한다. WPF의 구조·저장 정책과 범위는 [WPF 안내](wpf-preview.md)를 참고한다.
+4.0부터 WinForms와 전용 배포 스크립트·Chrome 확장을 제거했다. 기존 엔진의 .NET Framework 호환 타깃은 유지한다. 구버전 소스는 Git 이력과 3.x 릴리즈에서 확인할 수 있다.
 
-## 책임
+## 책임과 경계
 
 | 구성 요소 | 역할 |
 | --- | --- |
-| Core.YouTubeUrl | 호스트·경로·11자리 영상 ID 검증, watch/shorts/live/짧은 URL 정규화 |
-| Core.WindowsFileName | 템플릿·확장자·Windows 금지 문자·예약 이름·경로 길이 |
-| Core.DownloadQueueService | 동시 슬롯 임대, 대기 취소, 중복 반환 방지, 마지막 사용자 종료 후 Dispose |
-| Core.DownloadModels | 요청·오류·상태·nullable 진행률 |
-| Engine.ProcessRunner / ProcessJob | stdout/stderr 동시 비동기 처리, 종료 코드, 타임아웃, 취소, 소유한 프로세스 트리 종료 |
-| Engine.CommandLine | Windows CRT 따옴표·공백·역슬래시 인코딩 |
-| Engine.YtDlpClient | 조회·자막·다운로드의 공통 실행 옵션과 Deno/FFmpeg 경로 |
-| Engine.VideoMetadataService / SubtitleService | JSON 파싱·소수 FPS·자막 조회 및 저장 |
-| Engine.YtDlpDownloadCommandFactory | 인수 목록 생성, 형식·화질·인코더 검증 |
-| Engine.RecoveryPolicy | 오류 분류, 제한된 복구·백오프, 사용자 메시지 |
-| Engine.DownloadService | 준비→실행→선택적 재시도→검증→게시→완료 |
-| Engine.CompletedFile | 실제 완료 경로·경계·확장자·서명 검증, 덮어쓰기 없는 게시 |
-| Engine.DiagnosticLog / ToolDiagnostics | 버전·상태·전략·시도·오류·종료 코드, 민감값 마스킹·로그 회전 |
-| tools.YtDlpTool / DenoTool / Tol | 사용자 도구 폴더 부트스트랩 및 검증된 업데이트 |
+| Core.YouTubeUrl / WindowsFileName | URL 정규화·검증, 파일명 템플릿·경로·금지 문자 |
+| Core.DownloadQueueService / DownloadModels | 동시 슬롯·대기 취소, UI 독립 요청·상태·오류 |
+| Engine.ProcessRunner / ProcessJob | 비동기 stdout/stderr, 종료 코드·시간 초과·취소·소유 프로세스 트리 정리 |
+| Engine.VideoMetadataService / SubtitleService | 메타데이터·실제 포맷·자막 조회와 저장 |
+| Engine.YtDlpDownloadCommandFactory / YtDlpClient | 공통 도구 옵션, 영상·오디오·화질·인코더 인수 생성 |
+| Engine.DownloadService / CompletedFile / RecoveryPolicy | 다운로드·제한된 복구·최종 검증·덮어쓰기 없는 파일 게시 |
+| Engine.DiagnosticLog / ToolDiagnostics | 마스킹된 로그·회전, 외부 도구 버전·호환성 확인 |
+| WPF.MainWindowViewModel / DownloadItemViewModel | 큐·선택 작업·번호·순서·화면 상태·엔진 요청 조립 |
+| WPF.ItemSettingsViewModel / SettingsStore | 영상별 옵션·자막과 기존 WPF 설정의 안전한 저장 |
+| WPF.ToolWorkspaceViewModel / ToolSetupService | 공식 배포 도구 검증, 별도 묶음 준비·취소·전환 |
+| WPF.AppUpdateViewModel / AppUpdateService | 시작 시 정식 앱 릴리즈 확인, 설치본 다운로드·검증·취소 |
+| WPF.Motion / QueueMotion / SmoothScroll / DownloadJourney | 상태 모션·실제 생성 행의 이동·가상화 스크롤·진행 단계 표현 |
 
-WinForms는 입력·목록·표시를 담당한다. 프로세스 실행 문법과 파일 성공 판정은 엔진에 있다. MainForm의 작업 편성은 UI 스레드에서 실행하고, 슬롯과 프로세스 I/O는 별도 서비스가 관리한다. 단일 작업 토큰을 전체 작업 및 앱 수명 토큰에 연결한다.
+UI → ViewModel → IDownloadBackend → Core/Engine 순서다. 컨트롤이 다운로드 프로세스나 엔진을 직접 제어하지 않는다. 네트워크와 파일 I/O는 비동기로 실행하며, 종료 시 앱 수명 토큰을 취소하고 진행 중 작업이 정리될 때까지 기다린다.
 
-## 다운로드 정책
+## 다운로드·파일 정책
 
-- 특정 YouTube 클라이언트를 강제하지 않는다. `--ignore-config`로 사용자 전역 옵션 간섭을 차단한다. 쿠키 자동 수집이나 접근 제한 우회 옵션은 없다.
-- 정보 조회·자막·다운로드 모두 같은 yt-dlp 실행 계층, 소켓 타임아웃, Deno/FFmpeg 경로를 사용한다.
-- MP4/MKV/MOV/WebM은 병합·remux만 수행한다. AVI/FLV에 필요한 변환에만 인코더를 적용한다. 오디오는 공식 추출 옵션을 사용하고 OGG를 vorbis에 대응한다.
-- 기본 화질 폴백은 요청 해상도를 넘지 않는다. 고급 설정에서 끄면 선택 해상도/FPS를 정확히 요구한다.
-- 네트워크/응답 지연은 최대 총 3회, 403·PO 공급자·화질·GPU 복구는 첫 실패에 한 번만 시도한다. 백오프는 2/4초, 계산 상한은 30초다. 429·권한·디스크 부족·접근 제한·알 수 없는 오류는 반복하지 않는다.
-- GPU 변환 실패 시 불완전한 변환 목적 파일만 정리하고 원본을 유지해 CPU로 복구한다.
-- 진행률 100%는 최종 파일 검증 이후에만 표시한다. 측정되지 않은 병합·변환 진행률과 ETA를 만들지 않는다.
+- watch/shorts/live/짧은 URL을 정규화한다. 쿠키 자동 수집이나 접근 제한 우회를 제공하지 않는다.
+- 정보·자막·다운로드는 동일한 yt-dlp 계층과 FFmpeg/Deno 경로를 사용한다.
+- MP4/MKV/MOV/WebM은 병합·remux, AVI/FLV만 영상 인코더를 적용한다. OGG는 vorbis로 변환한다.
+- 품질 폴백은 요청 해상도 이하로 제한한다. 끄면 해상도/FPS를 정확히 요구한다.
+- 네트워크 복구는 최대 총 3회이며 403·PO 공급자·화질·GPU 복구는 첫 실패에서 한 번만 시도한다. 429·권한·공간·접근 제한·알 수 없는 오류는 반복하지 않는다.
+- 저장 폴더의 `.gmtfv-<작업ID>/`에서 실행한다. 종료 코드·실제 완료 경로·작업 폴더 경계·확장자·파일 서명을 검증한 뒤 최종 폴더에 게시한다. 기존 파일은 `(1)` 등의 이름으로 보존한다.
+- 실패·취소 작업 파일은 남긴다. 자동 복구는 같은 작업에서 이어받고 수동 재시도는 새 폴더에서 시작한다.
+- 완료는 검증 후에만 100%다. 병합·변환의 진행률이나 ETA를 추정해서 만들지 않는다.
+- 큐 순서 변경은 활성 다운로드와 도구 준비·제거 중에 잠근다. 선택 항목 간 상대 순서와 목록 저장 순서를 유지한다.
 
-## 파일·취소
+## 설정·도구·앱 업데이트
 
-저장 폴더 아래 `.gmtfv-<작업ID>/media.%(ext)s`에서 실행한다. 종료 코드 0과 `after_move` 경로, 작업 폴더 경계, 요청 확장자, 최소 크기, 컨테이너 헤더 서명을 확인한 뒤 최종 폴더로 이동한다. 매 파일의 전체 디코딩이나 무거운 미디어 분석은 하지 않는다. 동일 이름은 `File.Move`의 덮어쓰기 금지를 이용해 `(1)` 등으로 번호를 붙인다. 기존 파일을 성공 판정에 사용하지 않는다.
+설정과 로그는 기존 `%LocalAppData%/GMTFV.Preview`를 유지한다. WinForms 설정 파일이나 다운로드 파일을 제거하거나 가져오지 않는다. 기존 `%AppData%/GMTFV` 도구를 읽을 수 있으며 새 도구 묶음은 WPF 전용 Tools 하위에 별도로 준비한다. 도구는 SHA-256을 검증하고 실행 확인을 마친 새 폴더로 전환한다. 사용 중 공유 실행 파일을 교체하지 않는다.
 
-같은 작업의 자동 재시도는 `.part`를 이어받는다. 실패·취소 시 작업 폴더를 보존한다. 수동 재시도는 새 폴더에서 시작하며, 앱 종료 후 필요 없는 `.gmtfv-*` 폴더는 사용자가 정리할 수 있다. 성공 시 빈 폴더만 삭제한다. 자막도 별도 작업 폴더에서 새로 생성된 파일만 게시한다.
+앱 자동 업데이트는 공식 저장소의 GitHub `releases/latest`만 조회한다. 정식 새 버전, 정확한 설치 파일명·저장소 주소, 양의 제한된 크기, SHA-256 digest를 확인한다. 전송 후 크기와 해시를 검증하고 실행 직전에 다시 검증한다. 메타데이터는 2MiB, 설치본은 512MiB, 확인은 20초, 다운로드는 15분으로 제한한다. 실패·취소 시 해당 작업의 GUID staging 폴더만 정리한다. API digest 형식은 [GitHub 공식 문서](https://docs.github.com/en/rest/releases/assets)를 따른다.
 
-Windows Job Object를 닫아 직접 생성한 자식까지 종료한다. 프로세스 이름으로 다른 앱을 종료하지 않는다. 폼 종료 시 수명 토큰을 취소하며, 작업이 자기 CTS와 슬롯을 정리한다. 대기 중 취소로 슬롯을 잘못 반환하지 않는다.
+업데이트 발견은 비차단 표시이며 설치는 사용자가 선택한다. 미디어·메타데이터·자막·도구 작업 중에는 설치하지 않고, 다운로드 중 작업이 시작돼도 실행 직전에 다시 확인한다. 설치 전 설정과 큐 URL·옵션을 저장하고 `/DIR`에 현재 실행 위치를 전달해 설치 프로그램을 연 뒤 정상 종료 흐름을 사용한다. 다음 실행에 `update-queue.json`을 복원하고 `.restored` 백업을 남긴다. 큐의 완료·실패·진행 상태는 복원하지 않는다.
 
-## 도구·설정·배포
-
-기존 `%AppData%/GMTFV` 도구 폴더와 사용자 Settings 키를 유지하고 `AllowQualityFallback`만 기본 true로 추가했다. 기존 yt-dlp는 즉시 준비 상태로 사용하고, 버전 확인·업데이트는 뒤에서 한다. 변경된 릴리스만 SHA-256 검증 후 원자적으로 교체한다. 실패하면 현재 실행 파일을 보존한다.
-
-Deno는 도구 폴더 또는 PATH에서 찾고 최소 2.3.0을 확인한다. 없거나 호환되지 않으면 공식 Windows x64 배포본의 GitHub digest를 검증한 뒤 준비한다. 실패를 영구 캐시하지 않는다. 준비 실패로 앱을 강제 종료하지 않는다. EJS는 공식 yt-dlp 실행 파일의 번들을 사용하며 원격 스크립트 옵션은 추가하지 않았다. 기본 배포본은 별도 PO Token 공급자 서버를 시작하지 않는다. 저장소의 선택적 플러그인 자료는 기본 설치본에 포함하지 않는다.
-
-로그는 `%LocalAppData%/GMTFV/Logs`에 기록한다. 작업 ID, UTC 시각, 앱·도구 버전, 단계, 전략, 시도, 오류, 종료 코드, 제한된 stderr를 남긴다. URL·인증값·사용자 홈 경로를 마스킹한다. 2MiB 로그와 이전 파일 하나를 보관한다.
-
-설치 AppId와 DLLs probing 구조는 유지한다. Inno Setup의 기본 업그레이드·제거를 사용하고 설치 폴더 전체 삭제나 구버전 제거 프로그램 강제 실행은 하지 않는다. 외부 도구는 사용자 폴더에 별도로 준비하며 라이선스 고지를 동봉한다.
+설치 AppId는 3.x와 동일하다. 기존 WinForms 실행 파일과 앱 구성 파일만 설치 위치에서 정리한다. 사용자 설정·도구·다운로드 폴더를 삭제하는 제거 규칙은 없다. 배포본은 .NET 10/Windows Desktop Runtime과 해당 라이선스를 포함한다.
 
 ## 검증
 
-`GMTFV.slnx` Debug/Release 빌드 후 `tests/GMTFV.Tests/bin/<Configuration>/GMTFV.Tests.exe`를 실행한다. 가짜 프로세스 테스트도 실제 OS 파이프·종료 코드·프로세스 트리·타임아웃을 사용한다. `tests/media_smoke.py`는 자체 생성 미디어와 루프백 서버로 실제 도구를 검사한다. 외부 YouTube 성공률, GPU 하드웨어, 실제 설치·제거, Chrome 브라우저 조작은 별도 실환경 검증 대상이다.
+Core/Engine 콘솔 검사는 .NET 10에서 URL·명령·취소·프로세스·복구·출력 검증을 실행한다. WPF 검사는 실제 오프스크린 창과 바인딩·Dispatcher·가상화·모션·업데이트 대역을 사용한다. `tests/media_smoke.py`는 실제 yt-dlp/FFmpeg와 자체 생성 미디어로 형식을 확인한다. 실서비스 YouTube 성공률, GPU, 다양한 DPI, 물리 입력과 관리자/UAC 환경은 별도 검증 대상이다. 이번 배포 결과는 [4.0.0.0 기록](release-4.0.0.0.md)에 구분한다.

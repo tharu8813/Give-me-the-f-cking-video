@@ -15,7 +15,7 @@ using GMTFV.Wpf.Services;
 using GMTFV.Wpf.ViewModels;
 using GMTFV.Wpf.Views;
 
-internal static class Program
+internal static partial class Program
 {
     private static readonly string Root = Path.GetFullPath(Path.Combine("artifacts", "wpf-tests", Guid.NewGuid().ToString("N")));
     private static int passed;
@@ -32,7 +32,7 @@ internal static class Program
         PresentationTraceSources.DataBindingSource.Listeners.Add(Errors);
         PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Error;
         SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());
-        var task = RunAsync();
+        var task = args.Contains("--app-update-smoke") ? CheckLiveAppUpdateAsync() : args.Contains("--tool-setup-smoke") ? CheckLiveToolSetupAsync() : args.Contains("--live-metadata-smoke") ? CheckLiveMetadataAsync() : args.Contains("--motion-demo") ? CaptureMotionDemoAsync() : args.Contains("--queue-check") ? CheckQueueOrderAsync() : RunAsync();
         task.ContinueWith(_ => app.Dispatcher.BeginInvokeShutdown(DispatcherPriority.Background), TaskScheduler.Default);
         Dispatcher.Run();
         try { task.GetAwaiter().GetResult(); Console.WriteLine($"PASS {passed} WPF checks"); return 0; }
@@ -43,6 +43,7 @@ internal static class Program
     private static void Check(bool condition, string message) { if (!condition) throw new InvalidOperationException(message); passed++; Console.WriteLine("PASS " + message); }
     private static async Task RunAsync()
     {
+        await CheckAppUpdatesAsync();
         var processRunner = new ProcessRunner();
         var echo = await processRunner.RunAsync(Environment.ProcessPath!, "--echo", TimeSpan.FromSeconds(10), CancellationToken.None);
         Check(echo.ExitCode == 0 && echo.Output.Contains("net10-process-ok"), ".NET 10 native process runner");
@@ -147,26 +148,35 @@ internal static class Program
         Task adding = shutdown.AddUrlsAsync("https://youtu.be/abcdefghijk"); await Task.Delay(20); await shutdown.StopAsync(); await adding;
         Check(shutdown.Items[0].State == DownloadState.Cancelled, "shutdown awaits metadata cancellation");
 
+        await CheckQueueOrderAsync();
+        await CheckReworkAsync();
+        await CheckToolSetupAsync();
+        await CheckShowcaseAsync();
         await CheckItemFeaturesAsync();
         using var render = Create(new FakeBackend(), "render");
         var window = new MainWindow(render) { ShowActivated = false, ShowInTaskbar = false, WindowStartupLocation = WindowStartupLocation.Manual, Left = -30000, Top = -30000 };
         window.Show(); await Task.Delay(80);
         Check(window.Width <= SystemParameters.WorkArea.Width && window.Height <= SystemParameters.WorkArea.Height, "initial window fits the desktop work area");
         string artifacts = Path.GetFullPath(Path.Combine(Environment.CurrentDirectory, "artifacts", "wpf-preview")); Directory.CreateDirectory(artifacts);
-        Capture(window, Path.Combine(artifacts, "empty.png")); Check(render.IsEmpty, "empty state rendered");
+        await Capture(window, Path.Combine(artifacts, "empty.png")); Check(render.IsEmpty, "empty state rendered");
         double initialWidth = window.Width, initialHeight = window.Height;
         window.Width = window.MinWidth; window.Height = window.MinHeight; await LayoutAsync(window);
-        Capture(window, Path.Combine(artifacts, "empty-compact.png"));
+        await Capture(window, Path.Combine(artifacts, "empty-compact.png"));
         window.Width = initialWidth; window.Height = initialHeight; await LayoutAsync(window);
         using var renderCancellation = new CancellationTokenSource();
         int summaryChanges = 0;
         render.PropertyChanged += (_, e) => { if (e.PropertyName == nameof(MainWindowViewModel.Summary)) summaryChanges++; };
         for (int i = 0; i < 1000; i++) render.Items.Add(new DownloadItemViewModel("https://youtu.be/abcdefghijk") { Title = i % 2 == 0 ? "Night drive — a collection of moments" : "작업할 때 듣는 플레이리스트 · 서울의 밤", Metadata = new VideoMetadata { Id = "abcdefghijk", Title = "테스트 영상", UploadDate = new DateTime(2024, 1, 2), Formats = [new VideoFormat { Height = 1080, Fps = 60 }] }, Channel = "GMTFV Studio", Duration = "12:48", Selection = "MP4 · 1080p", Cancellation = i == 0 ? renderCancellation : null, State = i == 1 ? DownloadState.Failed : i == 0 ? DownloadState.Downloading : DownloadState.Ready, Percent = i == 0 ? 64 : null, Message = i == 1 ? "네트워크 연결을 확인한 후 다시 시도하세요." : i == 0 ? "다운로드 중 64%" : "준비 완료", Error = i == 1 ? "네트워크 연결을 확인하세요.\n상세 로그에서 오류 내용을 확인할 수 있습니다." : "" });
         Check(summaryChanges == 0, "bulk queue changes defer summary notifications");
-        await LayoutAsync(window); Capture(window, Path.Combine(artifacts, "queue.png"));
+        await LayoutAsync(window); await Capture(window, Path.Combine(artifacts, "queue.png"));
         Check(summaryChanges == 1 && render.Summary.StartsWith("1000개"), "bulk queue changes publish one accurate summary");
         var list = Find<ListBox>(window).Single(); int realized = Find<ListBoxItem>(list).Count();
         Check(realized > 0 && realized < 40, $"1000 rows virtualized ({realized} realized)");
+        Check(render.Items.Select(i => i.QueueNumber).SequenceEqual(Enumerable.Range(1, 1000)), "bulk additions assign consecutive queue numbers");
+        list.ScrollIntoView(render.Items[^1]); await LayoutAsync(window);
+        var lastRow = Find<ListBoxItem>(list).Single(r => ReferenceEquals(r.DataContext, render.Items[^1]));
+        Check(Find<TextBlock>(lastRow).Any(t => t.Text == "1000") && Find<ListBoxItem>(list).Count() < 40, "recycled rows display their actual queue number at the end of a large list");
+        list.ScrollIntoView(render.Items[0]); await LayoutAsync(window);
         foreach (string panel in new[] { "Settings", "Diagnostics", "About" }) {
             render.Panel = panel; await LayoutAsync(window);
             Check(Find<Border>(list).First().Background is SolidColorBrush surface && list.Background is SolidColorBrush expected && surface.Color == expected.Color, $"queue keeps its dark background with {panel} open");
@@ -181,7 +191,7 @@ internal static class Program
                         Check(Motion.ReduceMotion && render.Settings.ReduceMotion, "motion preference applies immediately without saving");
                         reduce.IsChecked = false;
                     }
-                    Capture(window, Path.Combine(artifacts, $"settings-tab-{tab}.png"));
+                    await Capture(window, Path.Combine(artifacts, $"settings-tab-{tab}.png"));
                 }
                 tabs.SelectedIndex = 2; await LayoutAsync(window);
                 var format = Find<ComboBox>(window).Single(c => System.Windows.Automation.AutomationProperties.GetName(c) == "저장 형식");
@@ -195,11 +205,11 @@ internal static class Program
                 Check(render.Settings.IsVideo && render.Settings.Format == "mp4" && (string?)format.SelectedItem == "mp4", "video mode restores a valid format selection");
                 Check((string?)format.SelectionBoxItem == "mp4" && Find<TextBlock>(format).Any(t => t.Text == "mp4"), "video format is visibly rendered after mode change");
             }
-            Capture(window, Path.Combine(artifacts, panel.ToLowerInvariant() + ".png"));
+            await Capture(window, Path.Combine(artifacts, panel.ToLowerInvariant() + ".png"));
         }
-        render.Panel = ""; render.Failure = render.Items[1]; await LayoutAsync(window); Capture(window, Path.Combine(artifacts, "failure.png"));
+        render.Panel = ""; render.Failure = render.Items[1]; await LayoutAsync(window); await Capture(window, Path.Combine(artifacts, "failure.png"));
         Check(Find<Border>(list).First().Background is SolidColorBrush failureSurface && list.Background is SolidColorBrush failureExpected && failureSurface.Color == failureExpected.Color, "queue keeps its dark background with the failure dialog open");
-        render.Failure = null; window.Width = window.MinWidth; window.Height = window.MinHeight; await LayoutAsync(window); Capture(window, Path.Combine(artifacts, "compact.png"));
+        render.Failure = null; window.Width = window.MinWidth; window.Height = window.MinHeight; await LayoutAsync(window); await Capture(window, Path.Combine(artifacts, "compact.png"));
         Check(list.ActualHeight >= 2 * Find<ListBoxItem>(list).First().ActualHeight, "minimum window shows at least two complete queue rows");
         Motion.ReduceMotion = false;
         render.Panel = "Settings"; await Task.Delay(280); Check(window.FindName("PanelOverlay") is FrameworkElement { Visibility: Visibility.Visible }, "animated panel opens");
@@ -211,7 +221,7 @@ internal static class Program
         render.Settings.ReduceMotion = true; render.SaveSettingsCommand.Execute(null);
         render.Panel = ""; render.Failure = render.Items[1]; await LayoutAsync(window);
         Check(window.FindName("FailureOverlay") is FrameworkElement { Visibility: Visibility.Visible, Opacity: 1 }, "failure dialog remains visible after enabling reduced motion");
-        Capture(window, Path.Combine(artifacts, "failure-reduced-motion.png"));
+        await Capture(window, Path.Combine(artifacts, "failure-reduced-motion.png"));
         render.Failure = null; await LayoutAsync(window);
         Check(render.IsWorkspaceEnabled && window.FindName("FailureOverlay") is FrameworkElement { Visibility: Visibility.Collapsed }, "reduced-motion dialog closes and restores workspace input");
         await CheckItemDialogAsync(window, render, artifacts);
@@ -291,10 +301,10 @@ internal static class Program
         await editor.LoadSubtitlesAsync(); editor.UseDefaults = false; editor.IsVideo = false; await LayoutAsync(window);
         var format = Find<ComboBox>(window).Single(c => System.Windows.Automation.AutomationProperties.GetName(c) == "영상별 저장 형식");
         Check((string?)format.SelectionBoxItem == "mp3", "per-item audio format is visibly rendered");
-        Capture(window, Path.Combine(artifacts, "item-settings.png"));
+        await Capture(window, Path.Combine(artifacts, "item-settings.png"));
         var scroller = Find<ScrollViewer>(Find<ItemSettingsView>(window).Single()).First();
         scroller.ScrollToBottom(); await LayoutAsync(window);
-        Capture(window, Path.Combine(artifacts, "item-settings-options.png"));
+        await Capture(window, Path.Combine(artifacts, "item-settings-options.png"));
         vm.SaveItemCommand.Execute(null); await Task.Delay(200);
         Check(vm.ItemSettings == null && vm.Items[2].Options is { IsVideo: false, Format: "mp3" } && vm.IsWorkspaceEnabled, "applying item settings restores workspace input");
     }
@@ -365,7 +375,14 @@ internal static class Program
         return args;
     }
     private static async Task LayoutAsync(Window window) { await Task.Delay(40); window.UpdateLayout(); await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle); }
-    private static void Capture(Window window, string path)
+    private static async Task Capture(Window window, string path)
+    {
+        if (Motion.Enabled) await Task.Delay(Motion.Spatial + 40);
+        await window.Dispatcher.InvokeAsync(() => { }, DispatcherPriority.ApplicationIdle);
+        window.UpdateLayout();
+        CaptureFrame(window, path);
+    }
+    private static void CaptureFrame(Window window, string path)
     {
         var content = (FrameworkElement)window.Content;
         var bitmap = new RenderTargetBitmap((int)content.ActualWidth, (int)content.ActualHeight, 96, 96, PixelFormats.Pbgra32); bitmap.Render(content);

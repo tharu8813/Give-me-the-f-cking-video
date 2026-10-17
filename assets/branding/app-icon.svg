@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <title>GMTFV — video download</title>
+  <rect x="8" y="8" width="240" height="240" rx="52" fill="#E8AF84"/>
+  <path fill="#171716" fill-rule="evenodd" d="M102 44 H154 Q164 44 164 54 V142 H194 Q204 142 197 150 L136 212 Q128 220 120 212 L59 150 Q52 142 62 142 H92 V54 Q92 44 102 44 Z M114 84 Q114 79 119 82 L147 99 Q152 102 147 105 L119 122 Q114 125 114 120 Z"/>
+</svg>
