@@ -3,7 +3,7 @@
 ## 프로젝트
 
 ```text
-GMTFV.csproj (WinForms, net472)
+src/GMTFV.WinForms/GMTFV.WinForms.csproj (WinForms, net472)
   ├─ src/GMTFV.Core (net472, UI·프로세스 의존성 없음)
   └─ src/GMTFV.DownloadEngine (net472)
        ├─ GMTFV.Core
@@ -56,7 +56,7 @@ Windows Job Object를 닫아 직접 생성한 자식까지 종료한다. 프로�
 
 기존 `%AppData%/GMTFV` 도구 폴더와 사용자 Settings 키를 유지하고 `AllowQualityFallback`만 기본 true로 추가했다. 기존 yt-dlp는 즉시 준비 상태로 사용하고, 버전 확인·업데이트는 뒤에서 한다. 변경된 릴리스만 SHA-256 검증 후 원자적으로 교체한다. 실패하면 현재 실행 파일을 보존한다.
 
-Deno는 도구 폴더 또는 PATH에서 찾고 최소 2.3.0을 확인한다. 없으면 공식 Windows x64 배포본의 GitHub digest를 검증한 뒤 준비한다. 실패를 영구 캐시하지 않는다. 준비 실패로 앱을 강제 종료하지 않는다. EJS는 공식 yt-dlp 실행 파일의 번들을 사용하며 원격 스크립트 옵션은 추가하지 않았다. 이 체크아웃에는 별도 PO Token 공급자가 없으며 새 서버를 생성하지 않는다.
+Deno는 도구 폴더 또는 PATH에서 찾고 최소 2.3.0을 확인한다. 없거나 호환되지 않으면 공식 Windows x64 배포본의 GitHub digest를 검증한 뒤 준비한다. 실패를 영구 캐시하지 않는다. 준비 실패로 앱을 강제 종료하지 않는다. EJS는 공식 yt-dlp 실행 파일의 번들을 사용하며 원격 스크립트 옵션은 추가하지 않았다. 기본 배포본은 별도 PO Token 공급자 서버를 시작하지 않는다. 저장소의 선택적 플러그인 자료는 기본 설치본에 포함하지 않는다.
 
 로그는 `%LocalAppData%/GMTFV/Logs`에 기록한다. 작업 ID, UTC 시각, 앱·도구 버전, 단계, 전략, 시도, 오류, 종료 코드, 제한된 stderr를 남긴다. URL·인증값·사용자 홈 경로를 마스킹한다. 2MiB 로그와 이전 파일 하나를 보관한다.
 

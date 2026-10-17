@@ -26,7 +26,7 @@ Windows 10/11 x64 및 .NET Framework 4.7.2 이상, 인터넷 연결이 필요하
 | FFmpeg + ffprobe | 스트림 병합·컨테이너 변경·오디오 추출·변환 |
 | Deno 2.3.0 이상 | YouTube JavaScript 실행. 도구 폴더 또는 PATH에서 검색 |
 
-첫 실행 시 FFmpeg/ffprobe 설치를 안내하고 yt-dlp와 누락된 Deno를 공식 배포처에서 준비한다. 다운로드는 체크섬 검증 후 반영한다. 기존 yt-dlp가 있으면 먼저 사용할 수 있게 하고 버전 확인은 뒤에서 한다. 도구 준비 실패로 앱을 강제 종료하지 않는다.
+첫 실행 시 FFmpeg/ffprobe 설치를 안내하고 yt-dlp와 누락되거나 호환되지 않는 Deno를 공식 배포처에서 준비한다. 다운로드는 체크섬 검증 후 반영한다. 기존 yt-dlp가 있으면 먼저 사용할 수 있게 하고 버전 확인은 뒤에서 한다. 도구 준비 실패로 앱을 강제 종료하지 않는다.
 
 ## 사용법
 
@@ -55,10 +55,10 @@ msbuild GMTFV.slnx /t:Build /p:Configuration=Debug
 .\tests\GMTFV.Tests\bin\Debug\GMTFV.Tests.exe
 msbuild GMTFV.slnx /t:Build /p:Configuration=Release
 .\tests\GMTFV.Tests\bin\Release\GMTFV.Tests.exe
-ISCC.exe setup.iss
+ISCC.exe setup_winform.iss
 ```
 
-WinForms 실행 파일은 `bin/Release/GMTFV.exe`, 관리 라이브러리는 `bin/Release/DLLs/`에 생성된다. `.exe.config`, `runtimes/`, 확장 ZIP과 라이선스 고지를 함께 배포한다. 확장 폴더는 빌드 시 동봉 ZIP에서 풀어 설치본에 포함한다. 설치본은 `output-setup/GMTFV-<버전>-setup.exe`로 생성된다. Core/DownloadEngine도 같은 .NET Framework를 사용한다.
+WinForms 실행 파일은 `src/GMTFV.WinForms/bin/Release/GMTFV.exe`, 관리 라이브러리는 `src/GMTFV.WinForms/bin/Release/DLLs/`에 생성된다. `.exe.config`, `runtimes/`, 확장 ZIP과 라이선스 고지를 함께 배포한다. 확장 폴더는 빌드 시 동봉 ZIP에서 풀어 설치본에 포함한다. 설치본은 `output-setup/GMTFV-<버전>-setup.exe`로 생성된다. Core/DownloadEngine도 같은 .NET Framework를 사용한다.
 
 실제 도구가 준비되면 자체 생성 미디어로 로컬 통합 테스트를 할 수 있다. YouTube에 접속하지 않는다.
 

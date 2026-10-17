@@ -1,4 +1,4 @@
-<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+﻿<Project ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <Import Project="$(MSBuildExtensionsPath)\$(MSBuildToolsVersion)\Microsoft.Common.props" />
   <PropertyGroup>
     <Configuration Condition="'$(Configuration)' == ''">Debug</Configuration>
@@ -6,7 +6,7 @@
     <OutputType>Exe</OutputType><AssemblyName>GMTFV.Tests</AssemblyName>
     <TargetFrameworkVersion>v4.7.2</TargetFrameworkVersion><LangVersion>7.3</LangVersion>
     <OutputPath>bin\$(Configuration)\</OutputPath><DebugSymbols>true</DebugSymbols>
-    <AppConfig>..\..\App.config</AppConfig>
+    <AppConfig>..\..\src\GMTFV.WinForms\App.config</AppConfig>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="System" /><Reference Include="System.Core" />
@@ -14,14 +14,14 @@
     <Reference Include="Newtonsoft.Json"><HintPath>..\..\packages\Newtonsoft.Json.13.0.4\lib\net45\Newtonsoft.Json.dll</HintPath></Reference>
     <ProjectReference Include="..\..\src\GMTFV.Core\GMTFV.Core.csproj"><Project>{63C7BFD3-DB57-4566-AB10-F193CB482AD8}</Project><Name>GMTFV.Core</Name></ProjectReference>
     <ProjectReference Include="..\..\src\GMTFV.DownloadEngine\GMTFV.DownloadEngine.csproj"><Project>{38B36788-05F3-427E-999A-68273170A5BB}</Project><Name>GMTFV.DownloadEngine</Name></ProjectReference>
-    <ProjectReference Include="..\..\GMTFV.csproj"><Project>{8B7ADC54-BAF1-4F91-ABAE-6DC71EF71536}</Project><Name>GMTFV</Name></ProjectReference>
+    <ProjectReference Include="..\..\src\GMTFV.WinForms\GMTFV.WinForms.csproj"><Project>{8B7ADC54-BAF1-4F91-ABAE-6DC71EF71536}</Project><Name>GMTFV</Name></ProjectReference>
     <Compile Include="Program.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
   <Target Name="CopyWinFormsRuntime" AfterTargets="Build">
-    <ItemGroup><WinFormsRuntime Include="..\..\bin\$(Configuration)\DLLs\*.dll" /></ItemGroup>
+    <ItemGroup><WinFormsRuntime Include="..\..\src\GMTFV.WinForms\bin\$(Configuration)\DLLs\*.dll" /></ItemGroup>
     <Copy SourceFiles="@(WinFormsRuntime)" DestinationFolder="$(TargetDir)DLLs" SkipUnchangedFiles="true" />
-    <ItemGroup><WinFormsExtension Include="..\..\bin\$(Configuration)\chrome-extension\*" /></ItemGroup>
+    <ItemGroup><WinFormsExtension Include="..\..\src\GMTFV.WinForms\bin\$(Configuration)\chrome-extension\*" /></ItemGroup>
     <Copy SourceFiles="@(WinFormsExtension)" DestinationFolder="$(TargetDir)chrome-extension" SkipUnchangedFiles="true" />
   </Target>
 </Project>

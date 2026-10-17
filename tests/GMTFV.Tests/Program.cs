@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -131,6 +131,11 @@ internal static class Program {
             string directory = Path.Combine(Root, "runtime"); Directory.CreateDirectory(directory); File.WriteAllText(Path.Combine(directory, "deno.exe"), "");
             var args = YtDlpClient.CommonArguments(directory); Check(args.Contains("--js-runtimes")); Check(args.Contains("deno:" + Path.Combine(directory, "deno.exe"))); Check(!args.Contains("--cookies-from-browser")); return Task.CompletedTask;
         });
+        foreach (string version in new[] { "deno 1.0.0", "deno 2.2.9", "invalid", "deno 2.3.0", "deno 2.5.0" })
+            await Test("Deno replacement decision " + version, async () => {
+                string directory = Path.Combine(Root, Guid.NewGuid().ToString("N")); Directory.CreateDirectory(directory); File.WriteAllText(Path.Combine(directory, "deno.exe"), "");
+                Equal(version != "deno 2.3.0" && version != "deno 2.5.0", await ToolDiagnostics.NeedsDenoInstallAsync(directory, new FakeRunner { DenoVersion = version }, CancellationToken.None));
+            });
         await Test("failed Deno version check is not cached", async () => {
             string directory = Path.Combine(Root, "runtime-retry"); Directory.CreateDirectory(directory); File.WriteAllText(Path.Combine(directory, "deno.exe"), "");
             var fake = new FakeRunner { DenoVersion = "deno 1.0.0" };

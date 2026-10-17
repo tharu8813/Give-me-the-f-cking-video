@@ -1,6 +1,6 @@
 # GMTFV 안정화 작업 결과
 
-검증일: 2026-10-18 (한국 시간). 기준 커밋: `064a87b`, 작업 브랜치: `codex/stabilize-winforms-20261018`. 시작 시 Git 작업 트리는 깨끗했다. 검증은 커밋 전 작업 트리에서 수행했으며 태그·릴리스 업로드는 수행하지 않았다.
+검증일: 2026-10-18 (한국 시간). 초기 기준 커밋: `064a87b`, 통합 기준: `482063b`, 작업 브랜치: `codex/stabilize-winforms-20261018`. 시작 시 Git 작업 트리는 깨끗했다. 검증은 커밋 전 작업 트리에서 수행했으며 태그·릴리스 업로드는 수행하지 않았다.
 
 ## 1. 전체 작업 요약
 
@@ -10,10 +10,10 @@ WinForms 사용자 흐름과 .NET Framework 4.7.2를 유지하면서 Core/Downlo
 
 ## 2. WPF 삭제 결과
 
-- `src/GMTFV.Wpf/`의 추적 파일 14개, 솔루션 프로젝트 항목, WinForms의 WebView2 WPF 참조와 Preview 안내를 제거했다.
-- 이 기준 커밋에는 `setup_wpf.iss`, `docs/wpf-migration/`, `PoTokenProviderService.cs`, 기존 `GMTFV.Core`가 없었다. 없는 파일을 삭제했다고 기록하지 않는다.
-- Core를 새로 만들었으며 향후 UI가 참조할 수 있는 독립 엔진을 구성했다. 기존 공유 라이브러리나 Git 기록·과거 릴리스는 삭제하지 않았다.
-- 실행·빌드·배포 소스에서 남은 WPF 참조를 검색했다. 이 보고서의 과거 파일명 및 NuGet 캐시 안의 공급자 패키지 구성 요소는 활성 프로젝트 참조가 아니다.
+- 최신 master의 `src/GMTFV.Wpf/`, WPF 전용 설치 스크립트·마이그레이션 문서·활성 프로젝트 참조를 제거했다.
+- `GMTFV.Core`는 유지하며 다운로드 모델·URL·파일명·동시성 정책을 .NET Framework 4.7.2에 맞췄다. 제거한 기존 WPF 전용 계약은 현재 호출처가 없다. Git 기록·과거 릴리스는 삭제하지 않았다.
+- 최신 WinForms 프로젝트 경로·Designer UI·Chrome 확장·목록 병렬 가져오기 및 임시 파일을 통한 저장 흐름을 유지했다. 저장 완료 파일 교체는 기존 검증된 교체 헬퍼를 사용한다.
+- 과거 감사 기록에는 당시 WPF 구성이 남아 있지만 현재 구조와 구분해 표시했다.
 
 ## 3. 주요 문제와 수정
 
@@ -59,7 +59,7 @@ P0로 확정한 결함은 없다. 다음은 실제 소스 및 테스트로 확�
 - `src/GMTFV.DownloadEngine/DownloadService.cs`, `RecoveryPolicy.cs`, `CompletedFile.cs`: 실행·복구·최종 파일 판정.
 - `src/GMTFV.DownloadEngine/VideoMetadataService.cs`, `SubtitleService.cs`: 조회와 자막.
 - `src/GMTFV.DownloadEngine/DiagnosticLog.cs`, `ToolDiagnostics.cs`: 진단·도구 호환성.
-- `Start/MainForm.cs`, `services/`: 기존 모델과 UI의 어댑터. 상세 구조는 `docs/architecture.md` 참고.
+- `src/GMTFV.WinForms/Start/MainForm.cs`, `src/GMTFV.WinForms/services/`: 기존 모델과 UI의 어댑터. 상세 구조는 `docs/architecture.md` 참고.
 - `tools/YtDlpTool.cs`, `DenoTool.cs`, `Tol.cs`, `GitHubUpdater.cs`: 도구·앱 업데이트와 부트스트랩.
 
 Core와 엔진도 net472를 사용한다. .NET Standard 2.0 타깃을 추가하거나 다른 런타임 호환성을 검증하지는 않았다. 새 의존성 패키지는 없다.
@@ -74,8 +74,8 @@ Core와 엔진도 net472를 사용한다. .NET Standard 2.0 타깃을 추가하�
 
 | 검사 | 결과 |
 | --- | --- |
-| Debug 자동 테스트 | 86 통과, 0 실패 |
-| Release 자동 테스트 | 86 통과, 0 실패 |
+| Debug 자동 테스트 | 91 통과, 0 실패 |
+| Release 자동 테스트 | 91 통과, 0 실패 |
 | 실제 yt-dlp/FFmpeg 로컬 형식 통합 | 13 통과, 0 실패 |
 | diff 공백 오류 검사 | 통과 |
 
@@ -94,7 +94,7 @@ Core와 엔진도 net472를 사용한다. .NET Standard 2.0 타깃을 추가하�
 - Visual Studio MSBuild로 net472 WinForms/Core/Engine 및 테스트 프로젝트의 Debug/Release 빌드를 수행했다.
 - 최종 빌드: 경고 0, 오류 0. 리소스 로딩·DLLs probing·엔진 DLL 및 WebView2 native 런타임 포함을 확인했다.
 - NuGet 복원은 종료 코드 0이었다. 다만 샌드박스에서 NuGet 취약성 정보 서버에 접속하지 못해 NU1900 경고가 있었다. 온라인 취약점 검사는 완료로 간주하지 않는다.
-- Inno Setup 6.7.3으로 실제 컴파일했다. `output-setup/GMTFV-3.4.0.0-setup.exe`를 생성했다. 버전과 AppId를 임의 변경하지 않았다.
+- Inno Setup 6.7.3으로 실제 컴파일했다. `output-setup/GMTFV-3.5.0.0-setup.exe`를 생성했다. 최신 master의 3.5.0.0 버전과 기존 AppId를 유지했다.
 - 설치본에는 관리 DLL, 설정, Chrome manifest/스크립트, 라이선스 고지가 포함된다. 외부 도구는 사용자 폴더에 별도로 준비하는 기존 배포 정책을 따른다.
 - 설치 스크립트의 전체 폴더 삭제·구버전 제거 강제 실행·강제 프로세스 종료 코드는 제거했다. 실제 시스템 설치·업그레이드·제거는 실행하지 않았다.
 
@@ -114,6 +114,10 @@ Core와 엔진도 net472를 사용한다. .NET Standard 2.0 타깃을 추가하�
 
 공식 옵션 근거: [yt-dlp README](https://github.com/yt-dlp/yt-dlp/blob/master/README.md), [EJS](https://github.com/yt-dlp/yt-dlp/wiki/EJS), [PO Token Guide](https://github.com/yt-dlp/yt-dlp/wiki/PO-Token-Guide). 실제 설치 버전의 `--version`, `--help`도 확인했다.
 
-## 커밋·푸시 시점의 원격 상태
+## PR #1 통합 검증
 
-사용자의 커밋·푸시 요청 후 fetch한 원격 `master`는 `482063b`였다. 기준 커밋 이후 WinForms 경로 이동과 별도 Core 및 배포 변경이 추가되어 있으므로 이 검증본을 원격 master에 덮어쓰거나 임의 병합하지 않고 별도 작업 브랜치로 보존한다. 최신 master와의 통합은 충돌 해결 및 재검증이 필요한 별도 작업이다.
+최신 master `482063b`를 작업 브랜치에 병합했다. `src/GMTFV.WinForms`의 이동된 프로젝트 경로와 최신 Designer UI·Chrome 확장 변경을 유지하면서 안정화 엔진과 연결했다. WPF 제거는 유지했다. 공용 계약 중 제거한 WPF 전용 계약은 현재 호출처가 없다.
+
+자동 리뷰에서 발견한 구버전 Deno 교체 누락을 수정했다. 로컬 또는 PATH에서 발견한 Deno가 2.3.0 미만이거나 버전 확인에 실패하면 검증된 로컬 런타임 설치 대상으로 처리한다. 구버전·경계 버전·정상 버전·잘못된 출력에 대한 테스트 5개를 추가했다.
+
+Debug/Release 자동 테스트와 13개 형식의 로컬 미디어 통합 검증, Inno Setup 컴파일을 통합 결과에 다시 실행해 통과했다. 실제 YouTube·GPU 하드웨어·실제 OS 설치/제거 및 Chrome E2E는 위 잔여 검증에 포함된다. GitHub PR에 등록된 CI 검사는 없다.

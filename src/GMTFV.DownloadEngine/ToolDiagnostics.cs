@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Concurrent;
 using System.IO;
 using System.Text.RegularExpressions;
@@ -31,6 +31,12 @@ namespace GMTFV.DownloadEngine {
                 catch (ArgumentException) { }
             }
             return null;
+        }
+
+        public static async Task<bool> NeedsDenoInstallAsync(string directory, IProcessRunner runner, CancellationToken token) {
+            if (ResolveDeno(directory) == null) return true;
+            try { await CheckDenoAsync(directory, runner, token).ConfigureAwait(false); return false; }
+            catch (InvalidOperationException) { return true; }
         }
 
         public static async Task CheckDenoAsync(string directory, IProcessRunner runner, CancellationToken token) {
