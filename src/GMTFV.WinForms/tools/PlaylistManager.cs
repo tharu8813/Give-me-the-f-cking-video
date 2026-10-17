@@ -1,4 +1,4 @@
-using GMTFV.models;
+﻿using GMTFV.models;
 using GMTFV.services;
 using Newtonsoft.Json;
 using System;
@@ -16,6 +16,16 @@ namespace GMTFV.tools {
     /// 다운로드 플레이리스트 목록의 저장(Export) 및 복원(Import) 관리를 전담하는 모듈
     /// </summary>
 public static class PlaylistManager {
+        internal static void ApplyConfiguration(VideoInfo video, ExportVideoData config) {
+            string extension = (config.SubType ?? (config.IsTypeVideo ? "mp4" : "mp3")).ToLowerInvariant();
+            if (!(config.IsTypeVideo ? Tol.VideoFormats : Tol.AudioFormats).Contains(extension))
+                throw new InvalidDataException("목록 파일에 지원하지 않는 저장 형식이 있습니다.");
+            video.TypeSave = new TypeSaveVideo { IsTypeVideo = config.IsTypeVideo, SubType = extension };
+            var selected = video.VideoQualities?.FirstOrDefault(q => q.Quality == config.Quality && (config.Fps <= 0 || q.Fps == config.Fps));
+            if (selected != null) foreach (var quality in video.VideoQualities) quality.IsSelected = quality == selected;
+        }
+
+
         // 메타데이터 요청을 과도하게 동시에 보내면 YouTube가 요청을 제한할 수 있습니다.
         private const int ImportConcurrency = 3;
 
@@ -164,7 +174,7 @@ public static class PlaylistManager {
             string temporaryPath = filePath + ".tmp";
             try {
                 File.WriteAllText(temporaryPath, content, Encoding.UTF8);
-                File.Copy(temporaryPath, filePath, true);
+                FileIntegrityVerifier.InstallVerifiedFile(temporaryPath, filePath);
             } finally {
                 if (File.Exists(temporaryPath)) File.Delete(temporaryPath);
             }

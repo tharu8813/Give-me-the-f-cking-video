@@ -1,4 +1,4 @@
-using GMTFV.Properties;
+﻿using GMTFV.Properties;
 using GMTFV.services;
 using GMTFV.tools;
 using Microsoft.WindowsAPICodePack.Dialogs;
@@ -21,6 +21,7 @@ namespace GMTFV.Start {
         /// </summary>
         private readonly List<VideoInfo> _existingVideos;
         private readonly MainForm _mainForm;
+        private readonly CheckBox allowQualityFallback = new CheckBox { AutoSize = true, Text = "선택 화질 이하의 화질로 자동 폴백 허용", Location = new Point(20, 300) };
 
         /// <summary>
         /// 다운로드 형식을 목록의 모든 영상에도 일괄 적용할지 여부.
@@ -33,6 +34,15 @@ namespace GMTFV.Start {
 
         public Setting(List<VideoInfo> existingVideos = null, MainForm mainForm = null) {
             InitializeComponent();
+            headerTitle.Text = "다운로드 설정";
+            advancedGroupBox.Controls.Add(allowQualityFallback);
+            allowQualityFallback.Location = new Point(15, 235);
+            tabBasic.Text = "기본";
+            tabAdvanced.Text = "고급";
+            labelGPUDesc.Text = "AVI/FLV 변환에만 적용 · 단순 병합은 재인코딩하지 않음";
+            button2.Text = "변경사항 저장";
+            btnExport.Text = "목록 내보내기";
+            btnImport.Text = "목록 불러오기";
             _existingVideos = existingVideos ?? new List<VideoInfo>();
             _mainForm = mainForm;
         }
@@ -72,6 +82,7 @@ namespace GMTFV.Start {
 
             // 고급 설정 - 디자이너 컨트롤 값 로드
             LoadAdvancedSettings();
+            allowQualityFallback.Checked = Settings.Default.AllowQualityFallback;
 
             UpdatePreview();
         }
@@ -93,10 +104,10 @@ namespace GMTFV.Start {
             comboGPU.SelectedIndex = gpuIndex;
 
             // 오디오 비트레이트 로드
-            numAudio.Value = Settings.Default.AudioBitrate;
+            numAudio.Value = Math.Max(numAudio.Minimum, Math.Min(numAudio.Maximum, Settings.Default.AudioBitrate));
 
             // 동시 다운로드 수 로드
-            numConcurrent.Value = Settings.Default.MaxConcurrentDownloads;
+            numConcurrent.Value = Math.Max(numConcurrent.Minimum, Math.Min(numConcurrent.Maximum, Settings.Default.MaxConcurrentDownloads));
         }
 
 
@@ -123,6 +134,7 @@ namespace GMTFV.Start {
             comboGPU.SelectedIndex = 0;
             numAudio.Value = 192;
             numConcurrent.Value = 1;
+            allowQualityFallback.Checked = true;
 
             UpdatePreview();
             MessageBox.Show("기본값으로 초기화되었습니다.", "완료", MessageBoxButtons.OK, MessageBoxIcon.Information);
@@ -252,9 +264,9 @@ namespace GMTFV.Start {
         /// </summary>
         private void UpdatePreview() {
             try {
-                string ext = comboBox1.SelectedItem?.ToString() ?? "mp4";
-                string preview = BuildPreviewName(txtFileNameTemplate.Text, ext);
-                lblPreview.Text = preview + "." + ext;
+                string ext      = comboBox1.SelectedItem?.ToString() ?? "mp4";
+                string preview  = BuildPreviewName(txtFileNameTemplate.Text, ext);
+                lblPreview.Text = preview;
                 lblPreview.ForeColor = Color.FromArgb(39, 174, 96);
             } catch {
                 lblPreview.Text = "(미리보기 오류)";
@@ -265,22 +277,8 @@ namespace GMTFV.Start {
         /// <summary>
         /// 샘플 데이터로 파일명 미리보기 문자열을 생성합니다.
         /// </summary>
-        private static string BuildPreviewName(string template, string ext) {
-            if (string.IsNullOrWhiteSpace(template))
-                template = "%title%_%date%";
-
-            return template
-                .Replace("%num3%", "001")
-                .Replace("%num2%", "01")
-                .Replace("%num%", "1")
-                .Replace("%no%", "1")
-                .Replace("%index%", "1")
-                .Replace("%title%", "영상제목_샘플")
-                .Replace("%author%", "채널이름")
-                .Replace("%date%", DateTime.Now.ToString("yyyy-MM-dd"))
-                .Replace("%id%", "dQw4w9WgXcQ")
-                .Replace("%ext%", ext);
-        }
+        private static string BuildPreviewName(string template, string ext) =>
+            GMTFV.Core.WindowsFileName.Build("영상제목_샘플", "채널이름", "dQw4w9WgXcQ", ext, template, 1);
 
         /// <summary>
         /// 저장 전 입력 값의 유효성을 검사합니다.
@@ -352,6 +350,7 @@ namespace GMTFV.Start {
             Settings.Default.AudioBitrate = (int)numAudio.Value;
             Settings.Default.MaxConcurrentDownloads = (int)numConcurrent.Value;
 
+            Settings.Default.AllowQualityFallback = allowQualityFallback.Checked;
             Settings.Default.Save();
             this.DialogResult = DialogResult.OK;
             Close();
@@ -361,10 +360,10 @@ namespace GMTFV.Start {
         /// 현재 UI 값이 저장된 값과 다른지 여부를 반환합니다.
         /// </summary>
         private bool HasChanges() {
-            bool basicChanges = comboBox1.SelectedItem?.ToString() != Settings.Default.SubType ||
-                   textBox2.Text != Settings.Default.Path ||
-                   radioButton1.Checked != Settings.Default.IsTypeVideo ||
-                   txtFileNameTemplate.Text.Trim() != Settings.Default.FileNameTemplate;
+            bool basicChanges = allowQualityFallback.Checked != Settings.Default.AllowQualityFallback || comboBox1.SelectedItem?.ToString() != Settings.Default.SubType ||
+                   textBox2.Text                      != Settings.Default.Path    ||
+                   radioButton1.Checked               != Settings.Default.IsTypeVideo ||
+                   txtFileNameTemplate.Text.Trim()    != Settings.Default.FileNameTemplate;
 
             // 고급 설정 변경 확인 - 디자이너 컨트롤에서 직접 읽기
             if (!basicChanges) {

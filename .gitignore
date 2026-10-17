@@ -368,3 +368,6 @@ FodyWeavers.xsd
 /ffmpeg.exe
 /deno.exe
 /pot-provider.exe
+
+/output-setup/
+/artifacts/

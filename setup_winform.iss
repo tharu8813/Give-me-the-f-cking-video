@@ -1,4 +1,4 @@
-; ============================================================================
+﻿; ============================================================================
 ; Inno Setup 스크립트 템플릿
 ; ============================================================================
 ; 아래 항목들만 수정하여 다른 프로그램에도 사용 가능합니다.
@@ -15,7 +15,7 @@
 ; 선택적 설정 (필요시 수정)
 #define SourcePath "src\GMTFV.WinForms\bin\Release"
 #define SetupIconPath "icon.ico"
-#define LicenseFilePath ""  ; 라이센스 파일 경로 (예: "license.txt")
+#define LicenseFilePath "LICENSE.txt"  ; 라이센스 파일 경로 (예: "license.txt")
 #define ReadmeFilePath ""   ; Readme 파일 경로 (예: "readme.txt")
 
 ; ============================================================================
@@ -36,8 +36,7 @@ DefaultDirName={commonpf}\{#MyAppName}
 PrivilegesRequired=admin
 DefaultGroupName={#MyAppName}
 DisableProgramGroupPage=yes
-OutputDir=output
-; 기존 버전의 자동 업데이트 프로그램이 이 이름 규칙을 찾으므로 유지합니다.
+OutputDir=output-setup
 OutputBaseFilename={#MyAppName}-{#MyAppVersion}-setup
 #if SetupIconPath != ""
 SetupIconFile={#SetupIconPath}
@@ -55,10 +54,10 @@ UninstallDisplayName={#MyAppName}
 UninstallDisplayIcon={app}\{#MyAppExeName}
 Uninstallable=yes
 AlwaysRestart=no
-DisableDirPage=no
-CloseApplications=force
-CloseApplicationsFilter={#MyAppExeName}
+CloseApplications=yes
 RestartApplications=no
+DisableDirPage=no
+CloseApplicationsFilter=*.exe,*.dll
 ArchitecturesInstallIn64BitMode=x64compatible
 VersionInfoVersion={#MyAppVersion}
 VersionInfoCompany={#MyAppPublisher}
@@ -77,12 +76,7 @@ Name: "chromeextension"; Description: "Chrome 탭 가져오기 확장 프로그�
 
 [Files]
 Source: "{#SourcePath}\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#SourcePath}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.pdb,*.log,*.tmp,yt-dlp.exe,ffmpeg.exe,deno.exe,pot-provider.exe,yt-dlp-plugins\*"
-Source: "{#SourcePath}\yt-dlp.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#SourcePath}\ffmpeg.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#SourcePath}\deno.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#SourcePath}\pot-provider.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#SourcePath}\yt-dlp-plugins\*"; DestDir: "{app}\yt-dlp-plugins"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#SourcePath}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "{#MyAppExeName},*.pdb,*.log,*.tmp,*.xml"
 
 [Icons]
 Name: "{group}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"
@@ -92,89 +86,3 @@ Name: "{autodesktop}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"; Tasks: de
 [Run]
 Filename: "{app}\{#MyAppExeName}"; Description: "{cm:LaunchProgram,{#StringChange(MyAppName, '&', '&&')}}"; Flags: nowait postinstall skipifsilent
 Filename: "explorer.exe"; Parameters: "{app}\chrome-extension"; Description: "Chrome 탭 가져오기 확장 프로그램 설치 안내 열기"; Flags: postinstall skipifsilent; Tasks: chromeextension
-
-[UninstallDelete]
-Type: filesandordirs; Name: "{app}"
-
-[Code]
-{ 이전 버전 제거를 위한 함수들 }
-
-function GetUninstallString(): String;
-var
-  sUnInstPath: String;
-  sUnInstallString: String;
-begin
-  sUnInstPath := ExpandConstant('Software\Microsoft\Windows\CurrentVersion\Uninstall\{#emit SetupSetting("AppId")}_is1');
-  sUnInstallString := '';
-  if not RegQueryStringValue(HKLM, sUnInstPath, 'UninstallString', sUnInstallString) then
-    RegQueryStringValue(HKCU, sUnInstPath, 'UninstallString', sUnInstallString);
-  Result := sUnInstallString;
-end;
-
-function IsUpgrade(): Boolean;
-begin
-  Result := (GetUninstallString() <> '');
-end;
-
-function UnInstallOldVersion(): Integer;
-var
-  sUnInstallString: String;
-  iResultCode: Integer;
-begin
-  { Return Values: }
-  { 1 - uninstall string is empty }
-  { 2 - error executing the UnInstallString }
-  { 3 - successfully executed the UnInstallString }
-
-  Result := 0;
-  sUnInstallString := GetUninstallString();
-  
-  if sUnInstallString <> '' then begin
-    sUnInstallString := RemoveQuotes(sUnInstallString);
-    if Exec(sUnInstallString, '/SILENT /NORESTART /SUPPRESSMSGBOXES', '', SW_HIDE, ewWaitUntilTerminated, iResultCode) then
-      Result := 3
-    else
-      Result := 2;
-  end else
-    Result := 1;
-end;
-
-{ 실행 중인 프로세스 종료 }
-function PrepareToInstall(var NeedsRestart: Boolean): String;
-var
-  ResultCode: Integer;
-begin
-  Result := '';
-  
-  { 프로그램이 실행 중인 경우 종료 시도 }
-  if CheckForMutexes('{#MyAppName}') then
-  begin
-    if MsgBox('설치를 계속하려면 {#MyAppName}을(를) 종료해야 합니다.' + #13#10 + '지금 종료하시겠습니까?', 
-              mbConfirmation, MB_YESNO) = IDYES then
-    begin
-      Exec('taskkill.exe', '/F /IM {#MyAppExeName}', '', SW_HIDE, ewWaitUntilTerminated, ResultCode);
-      Sleep(1000);
-    end else
-      Result := '설치가 취소되었습니다.';
-  end;
-end;
-
-procedure CurStepChanged(CurStep: TSetupStep);
-begin
-  if (CurStep = ssInstall) then
-  begin
-    if (IsUpgrade()) then
-    begin
-      UnInstallOldVersion();
-    end;
-  end;
-end;
-
-{ 설치 완료 후 정보 }
-procedure CurPageChanged(CurPageID: Integer);
-begin
-  if CurPageID = wpFinished then
-  begin
-    { 필요시 추가 작업 }
-  end;
-end;

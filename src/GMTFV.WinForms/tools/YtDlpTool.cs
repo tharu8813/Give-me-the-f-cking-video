@@ -1,532 +1,258 @@
-using System;
-using System.Diagnostics;
+﻿using System;
+using GMTFV.DownloadEngine;
 using System.IO;
-using System.Text;
+using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using GMTFV.services;
+using static GMTFV.tools.Tol;
 
 namespace GMTFV.tools {
-    internal class YtDlpTool {
+    internal static class YtDlpTool {
 
         // ─────────────────────────────────────────────────
-        //  Constants
+        //  정적 필드
         // ─────────────────────────────────────────────────
 
-        private const string YtDlpFileName = "yt-dlp.exe";
-        private const string DenoFileName = "deno.exe";
+        /// <summary>
+        /// 애플리케이션 수명 동안 재사용되는 단일 HttpClient 인스턴스.
+        /// Timeout·User-Agent는 한 번만 설정됩니다.
+        /// </summary>
+        private static readonly HttpClient _httpClient = CreateHttpClient();
 
+        /// <summary>
+        /// EnsureYtDlpAsync 의 동시 실행을 1개로 제한하는 세마포어.
+        /// </summary>
+        private static readonly SemaphoreSlim _ensureSemaphore = new SemaphoreSlim(1, 1);
+
+        /// <summary>yt-dlp GitHub 최신 릴리즈 다운로드 URL</summary>
+        private const string DownloadUrl =
+            "https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp.exe";
+        private const string ChecksumUrl =
+            "https://github.com/yt-dlp/yt-dlp/releases/latest/download/SHA2-256SUMS";
 
         // ─────────────────────────────────────────────────
         //  Public API
         // ─────────────────────────────────────────────────
 
         /// <summary>
-        /// yt-dlp.exe가 존재하는지 확인합니다.
+        /// yt-dlp 가 없으면 다운로드하고, 있으면 최신 버전으로 업데이트합니다.
+        /// 동시에 여러 호출이 와도 한 번에 하나만 실행됩니다.
         /// </summary>
-        public static bool IsYtDlpInstalled(string baseDir) {
+        public static async Task EnsureYtDlpAsync(
+            string baseDir,
+            IProgress<FFmpegProgress> progress = null) {
+
             if (string.IsNullOrWhiteSpace(baseDir))
+                throw new ArgumentNullException(nameof(baseDir));
+
+            // 동시 실행 방지
+            await _ensureSemaphore.WaitAsync();
+            try {
+                await EnsureYtDlpCoreAsync(baseDir, progress);
+            } finally {
+                _ensureSemaphore.Release();
+            }
+        }
+
+        // ─────────────────────────────────────────────────
+        //  Private 핵심 로직
+        // ─────────────────────────────────────────────────
+
+        /// <summary>
+        /// EnsureYtDlpAsync 의 실제 구현 (세마포어 내부에서 호출).
+        /// </summary>
+        private static async Task EnsureYtDlpCoreAsync(
+            string baseDir,
+            IProgress<FFmpegProgress> progress) {
+
+            string ytdlpPath = Path.Combine(baseDir, "yt-dlp.exe");
+            string tempPath  = ytdlpPath + ".tmp";
+
+            if (File.Exists(ytdlpPath)) {
+                ReportProgress(progress, 100, "yt-dlp 준비 완료");
+                _ = RefreshInstalledAsync(baseDir);
+                return;
+            }
+
+            // ── 파일이 없으면 신규 다운로드 ──
+            EnsureDirectory(baseDir);
+            ReportProgress(progress, 0, "yt-dlp 다운로드 중...");
+
+            try {
+                // 임시 파일로 다운로드
+                await DownloadToFileAsync(tempPath, progress);
+
+                // 다운로드 성공 → 정식 위치로 이동 (검증 후 원자적 교체)
+                InstallVerifiedFile(tempPath, ytdlpPath);
+
+                ReportProgress(progress, 100, "yt-dlp 다운로드 완료!");
+                Console.WriteLine($"yt-dlp가 성공적으로 설치되었습니다: {ytdlpPath}");
+            } catch (Exception ex) {
+                // 임시 파일만 정리 (기존 exe 는 없으므로 추가 보호 불필요)
+                DeleteFileIfExists(tempPath);
+
+                throw new Exception($"yt-dlp 다운로드 실패: {ex.Message}", ex);
+            }
+        }
+
+        private static async Task RefreshInstalledAsync(string baseDir) {
+            await _ensureSemaphore.WaitAsync();
+            try {
+                if ((DateTime.Now - GMTFV.Properties.Settings.Default.LastYtDlpUpdateCheck).TotalHours < 24) return;
+                string path = Path.Combine(baseDir, "yt-dlp.exe");
+                await UpdateYtDlpIfNeededAsync(path, path + ".tmp", null);
+                GMTFV.Properties.Settings.Default.LastYtDlpUpdateCheck = DateTime.Now;
+                GMTFV.Properties.Settings.Default.Save();
+            } catch (Exception ex) { new DiagnosticLog().Write("yt-dlp-update", ex.Message); }
+            finally { _ensureSemaphore.Release(); }
+        }
+
+        /// <summary>
+        /// 릴리스 버전을 비교하고 체크섬을 검증한 실행 파일로 교체합니다.
+        /// </summary>
+        /// <returns>업데이트가 실제로 수행되었으면 <c>true</c>, 최신 버전이거나 실패하면 <c>false</c>.</returns>
+        private static async Task<bool> UpdateYtDlpIfNeededAsync(
+            string ytdlpPath,
+            string tempPath,
+            IProgress<FFmpegProgress> progress) {
+
+            if (!File.Exists(ytdlpPath))
                 return false;
 
             try {
-                return File.Exists(
-                    Path.Combine(baseDir, YtDlpFileName));
+                string installed = await ToolDiagnostics.VersionAsync(ytdlpPath, new ProcessRunner(), CancellationToken.None);
+                using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20)))
+                using (var release = await _httpClient.GetAsync("https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest", timeout.Token)) {
+                    release.EnsureSuccessStatusCode();
+                    string tag = Newtonsoft.Json.Linq.JObject.Parse(await release.Content.ReadAsStringAsync())["tag_name"]?.ToString().TrimStart('v');
+                    if (string.Equals(tag, installed, StringComparison.OrdinalIgnoreCase)) return false;
+                }
+                ReportProgress(progress, 10, "yt-dlp 업데이트 확인 및 검증 중...");
+                await DownloadToFileAsync(tempPath, progress);
+
+                // 검증된 파일만 기존 실행 파일을 교체합니다.
+                InstallVerifiedFile(tempPath, ytdlpPath);
+                return true;
             } catch (Exception ex) {
-                Console.WriteLine(
-                    $"IsYtDlpInstalled 오류: {ex.Message}");
+                DeleteFileIfExists(tempPath);
+                // 업데이트 실패 → 기존 exe 그대로 사용
+                Console.WriteLine($"yt-dlp 업데이트 실패 (기존 버전 유지): {ex.Message}");
+
+                ReportProgress(progress, 100, "업데이트 확인 실패 (기존 버전 사용)");
 
                 return false;
             }
         }
 
-
         /// <summary>
-        /// yt-dlp 명령어를 비동기로 실행하고 stdout을 반환합니다.
-        /// ExitCode != 0이면 stderr를 포함한 예외를 던집니다.
+        /// GitHub 에서 yt-dlp.exe 를 <paramref name="destPath"/> 로 다운로드합니다.
+        /// Progress 에 진행률을 보고합니다.
         /// </summary>
-        public static async Task<string> RunYtDlpCommandAsync(
-            string ytdlpPath,
-            string arguments,
-            int timeout = 30,
-            CancellationToken cancellationToken = default) {
+        private static async Task DownloadToFileAsync(
+            string destPath,
+            IProgress<FFmpegProgress> progress) {
 
-            if (string.IsNullOrWhiteSpace(ytdlpPath))
-                throw new ArgumentNullException(nameof(ytdlpPath));
+            using (var response = await _httpClient.GetAsync(
+                DownloadUrl,
+                HttpCompletionOption.ResponseHeadersRead)) {
 
-            if (timeout <= 0)
-                throw new ArgumentOutOfRangeException(
-                    nameof(timeout),
-                    "timeout은 1초 이상이어야 합니다.");
+            response.EnsureSuccessStatusCode();
 
-            // 호출하기 전에 이미 취소되었다면 바로 종료
-            cancellationToken.ThrowIfCancellationRequested();
+            long? totalBytes = response.Content.Headers.ContentLength;
 
-            string fullYtDlpPath;
+            // FileStream: using 문으로 확실하게 Dispose
+            using (var fileStream = new FileStream(
+                destPath,
+                FileMode.Create,
+                FileAccess.Write,
+                FileShare.None)) {
 
-            try {
-                fullYtDlpPath = Path.GetFullPath(ytdlpPath);
-            } catch (Exception ex) {
-                throw new ArgumentException(
-                    "올바르지 않은 yt-dlp 경로입니다.",
-                    nameof(ytdlpPath),
-                    ex);
-            }
+                using (var contentStream = await response.Content.ReadAsStreamAsync()) {
+                    byte[] buffer    = new byte[8192];
+                    long   totalRead = 0;
+                    int    bytesRead;
 
-            if (!File.Exists(fullYtDlpPath)) {
-                throw new FileNotFoundException(
-                    "yt-dlp.exe를 찾을 수 없습니다. " +
-                    "프로그램을 다시 설치해주세요.",
-                    fullYtDlpPath);
-            }
+                    while ((bytesRead = await contentStream.ReadAsync(buffer, 0, buffer.Length)) > 0) {
+                        await fileStream.WriteAsync(buffer, 0, bytesRead);
+                        totalRead += bytesRead;
 
-            // Deno Runtime 탐색
-            string denoPath = FindDenoPath(fullYtDlpPath);
-
-            if (denoPath == null) {
-                throw new FileNotFoundException(
-                    "Deno JavaScript Runtime을 찾을 수 없습니다. " +
-                    "프로그램을 다시 설치해주세요.",
-                    DenoFileName);
-            }
-
-            // 앱에 동봉한 bgutil 공급자만 명시적으로 로드합니다.
-            // 사용자/이전 빌드의 플러그인은 차단해 nodriver 등 미설치 의존성 오류를 방지합니다.
-            string pluginArgument = PoTokenProviderService.IsAvailable
-                ? "--no-plugin-dirs --plugin-dirs " + QuoteCommandLineArgument(Tol.YtDlpPluginDirectory)
-                : "--no-plugin-dirs";
-            string safeRuntimeArguments =
-                "--ignore-config " + pluginArgument + " --js-runtimes " +
-                QuoteCommandLineArgument($"deno:{denoPath}");
-
-            string finalArguments = string.IsNullOrWhiteSpace(arguments)
-                ? safeRuntimeArguments
-                : $"{safeRuntimeArguments} {arguments}";
-
-            string workingDirectory =
-                Path.GetDirectoryName(fullYtDlpPath);
-
-            if (string.IsNullOrWhiteSpace(workingDirectory)) {
-                workingDirectory =
-                    AppDomain.CurrentDomain.BaseDirectory;
-            }
-
-            var startInfo = new ProcessStartInfo {
-                FileName = fullYtDlpPath,
-                Arguments = finalArguments,
-
-                WorkingDirectory = workingDirectory,
-
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-
-                UseShellExecute = false,
-                CreateNoWindow = true,
-
-                StandardOutputEncoding = Encoding.UTF8,
-                StandardErrorEncoding = Encoding.UTF8
-            };
-
-            using (var process = new Process()) {
-                process.StartInfo = startInfo;
-                process.EnableRaisingEvents = true;
-
-                var output = new StringBuilder();
-                var error = new StringBuilder();
-
-                // 프로세스 종료 확인
-                var processExited =
-                    new TaskCompletionSource<bool>(
-                        TaskCreationOptions.RunContinuationsAsynchronously);
-
-                // stdout 읽기 완료 확인
-                var outputClosed =
-                    new TaskCompletionSource<bool>(
-                        TaskCreationOptions.RunContinuationsAsynchronously);
-
-                // stderr 읽기 완료 확인
-                var errorClosed =
-                    new TaskCompletionSource<bool>(
-                        TaskCreationOptions.RunContinuationsAsynchronously);
-
-
-                process.OutputDataReceived += (_, e) => {
-                    if (e.Data == null) {
-                        outputClosed.TrySetResult(true);
-                        return;
-                    }
-
-                    output.AppendLine(e.Data);
-                };
-
-
-                process.ErrorDataReceived += (_, e) => {
-                    if (e.Data == null) {
-                        errorClosed.TrySetResult(true);
-                        return;
-                    }
-
-                    error.AppendLine(e.Data);
-                };
-
-
-                process.Exited += (_, __) => {
-                    processExited.TrySetResult(true);
-                };
-
-
-                try {
-                    if (!process.Start()) {
-                        throw new InvalidOperationException(
-                            "yt-dlp 프로세스를 시작할 수 없습니다.");
-                    }
-
-                    process.BeginOutputReadLine();
-                    process.BeginErrorReadLine();
-
-                    // 극히 드문 race condition 방지
-                    if (process.HasExited)
-                        processExited.TrySetResult(true);
-
-
-                    using (var timeoutCts =
-                           new CancellationTokenSource()) {
-
-                        timeoutCts.CancelAfter(
-                            TimeSpan.FromSeconds(timeout));
-
-                        using (var linkedCts =
-                               CancellationTokenSource
-                                   .CreateLinkedTokenSource(
-                                       cancellationToken,
-                                       timeoutCts.Token)) {
-
-                            // CancellationToken을 Task로 변환
-                            Task cancellationTask =
-                                Task.Delay(
-                                    Timeout.Infinite,
-                                    linkedCts.Token);
-
-                            Task completedTask =
-                                await Task.WhenAny(
-                                        processExited.Task,
-                                        cancellationTask)
-                                    .ConfigureAwait(false);
-
-
-                            // 정상적으로 프로세스가 종료되지 않은 경우
-                            if (completedTask != processExited.Task) {
-
-                                TryKillProcess(process);
-
-                                // 사용자에 의한 취소
-                                if (cancellationToken
-                                    .IsCancellationRequested) {
-
-                                    throw new OperationCanceledException(
-                                        "yt-dlp 명령 실행이 취소되었습니다.",
-                                        cancellationToken);
-                                }
-
-                                // timeout 발생
-                                throw new TimeoutException(
-                                    $"yt-dlp 명령 실행 시간 초과 " +
-                                    $"({timeout}초)");
-                            }
+                        if (totalBytes.HasValue && progress != null) {
+                            int pct = (int)((totalRead * 100L) / totalBytes.Value);
+                            progress.Report(new FFmpegProgress {
+                                Percentage = Math.Min(pct, 99), // 100%는 이동 완료 후
+                                Message    = $"yt-dlp 다운로드 중... {pct}%"
+                            });
                         }
                     }
-
-
-                    // stdout / stderr의 비동기 읽기가
-                    // 완전히 끝날 때까지 대기
-                    await Task.WhenAll(
-                            outputClosed.Task,
-                            errorClosed.Task)
-                        .ConfigureAwait(false);
-
-
-                    string outputText = output.ToString();
-                    string errorText = error.ToString();
-
-
-                    if (!string.IsNullOrWhiteSpace(errorText)) {
-                        Console.WriteLine(
-                            $"yt-dlp stderr:{Environment.NewLine}" +
-                            errorText.Trim());
-                    }
-
-
-                    if (process.ExitCode != 0) {
-                        string stderr =
-                            string.IsNullOrWhiteSpace(errorText)
-                                ? "없음"
-                                : errorText.Trim();
-
-                        throw new Exception(
-                            $"yt-dlp 비정상 종료 " +
-                            $"(ExitCode={process.ExitCode}). " +
-                            $"stderr: {stderr}");
-                    }
-
-
-                    return outputText;
-
-                } catch (OperationCanceledException) {
-
-                    TryKillProcess(process);
-                    throw;
-
-                } catch (TimeoutException) {
-
-                    TryKillProcess(process);
-                    throw;
-
-                } catch (Exception ex) {
-
-                    TryKillProcess(process);
-
-                    throw new Exception(
-                        $"yt-dlp 명령 실행 실패: {ex.Message}",
-                        ex);
                 }
+            } // FileStream 이 닫힌 뒤에 Move 를 호출해야 함
+
+            await FileIntegrityVerifier.VerifyRemoteSha256Async(
+                destPath,
+                new Uri(ChecksumUrl),
+                "yt-dlp.exe");
             }
         }
 
-
-        /// <summary>
-        /// yt-dlp로 비디오 정보(JSON)를 가져옵니다.
-        /// </summary>
-        public static async Task<string> GetVideoInfoJsonAsync(
-            string ytdlpPath,
-            string url,
-            CancellationToken cancellationToken = default) {
-
-            if (string.IsNullOrWhiteSpace(ytdlpPath))
-                throw new ArgumentNullException(nameof(ytdlpPath));
-
-            if (string.IsNullOrWhiteSpace(url))
-                throw new ArgumentNullException(nameof(url));
-
-            cancellationToken.ThrowIfCancellationRequested();
-
-            string arguments =
-                "--dump-json " +
-                "--no-warnings " +
-                "--no-playlist " +
-                GetYoutubeClientArguments() + " " +
-                QuoteCommandLineArgument(url);
-
-            try {
-                return await RunYtDlpCommandAsync(
-                        ytdlpPath,
-                        arguments,
-                        timeout: 30,
-                        cancellationToken)
-                    .ConfigureAwait(false);
-
-            } catch (OperationCanceledException) {
-                throw;
-
-            } catch (TimeoutException) {
-                throw;
-
-            } catch (Exception ex) {
-                throw new Exception(
-                    $"비디오 정보 가져오기 실패: {ex.Message}",
-                    ex);
-            }
+        private static void InstallVerifiedFile(string source, string destination) {
+            FileIntegrityVerifier.InstallVerifiedFile(source, destination);
+            DeleteFileIfExists(source);
         }
-
-        internal static string GetYoutubeClientArguments() {
-            return PoTokenProviderService.IsAvailable
-                ? "--extractor-args \"youtube:player_client=mweb\""
-                : "--extractor-args \"youtube:player_client=tv,web_embedded,android_vr\"";
-        }
-
-
-        /// <summary>
-        /// 현재 실행 중인 yt-dlp 프로세스를 모두 강제 종료합니다.
-        /// </summary>
-        public static void KillAllYtDlpProcesses() {
-            try {
-                Process[] processes =
-                    Process.GetProcessesByName("yt-dlp");
-
-                foreach (Process process in processes) {
-                    try {
-                        TryKillProcess(process);
-
-                    } catch (Exception ex) {
-                        Console.WriteLine(
-                            $"yt-dlp 프로세스 종료 오류: " +
-                            $"{ex.Message}");
-
-                    } finally {
-                        process.Dispose();
-                    }
-                }
-
-            } catch (Exception ex) {
-                Console.WriteLine(
-                    $"KillAllYtDlpProcesses 오류: {ex.Message}");
-            }
-        }
-
 
         // ─────────────────────────────────────────────────
-        //  Private Helpers
+        //  Private 헬퍼
         // ─────────────────────────────────────────────────
 
         /// <summary>
-        /// Deno Runtime의 위치를 탐색합니다.
-        ///
-        /// 탐색 순서:
-        /// 1. yt-dlp.exe와 같은 폴더
-        /// 2. 프로그램 실행 파일 폴더
-        /// 3. 현재 작업 폴더
+        /// 정적 HttpClient 를 초기화합니다 (한 번만 호출됨).
         /// </summary>
-        private static string FindDenoPath(string ytdlpPath) {
-
-            // 1. yt-dlp.exe 위치
-            string ytdlpDirectory =
-                Path.GetDirectoryName(ytdlpPath);
-
-            if (!string.IsNullOrWhiteSpace(ytdlpDirectory)) {
-                string path =
-                    Path.Combine(
-                        ytdlpDirectory,
-                        DenoFileName);
-
-                if (File.Exists(path))
-                    return Path.GetFullPath(path);
-            }
-
-
-            // 2. 프로그램 실행 파일 위치
-            string appDirectory =
-                AppDomain.CurrentDomain.BaseDirectory;
-
-            if (!string.IsNullOrWhiteSpace(appDirectory)) {
-                string path =
-                    Path.Combine(
-                        appDirectory,
-                        DenoFileName);
-
-                if (File.Exists(path))
-                    return Path.GetFullPath(path);
-            }
-
-
-            // 3. 현재 Working Directory
-            try {
-                string path =
-                    Path.Combine(
-                        Directory.GetCurrentDirectory(),
-                        DenoFileName);
-
-                if (File.Exists(path))
-                    return Path.GetFullPath(path);
-
-            } catch {
-                // CurrentDirectory를 가져올 수 없는 경우 무시
-            }
-
-
-            return null;
+        private static HttpClient CreateHttpClient() {
+            var client = new HttpClient {
+                Timeout = TimeSpan.FromMinutes(2)
+            };
+            client.DefaultRequestHeaders.Add(
+                "User-Agent",
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64)");
+            return client;
         }
 
-
         /// <summary>
-        /// 프로세스가 실행 중이면 안전하게 종료합니다.
+        /// 디렉토리가 없으면 생성합니다.
         /// </summary>
-        private static void TryKillProcess(Process process) {
-            if (process == null)
-                return;
-
+        private static void EnsureDirectory(string dir) {
             try {
-                if (process.HasExited)
-                    return;
-
-                process.Kill();
-
-                try {
-                    process.WaitForExit(3000);
-                } catch {
-                    // 종료 대기 실패는 무시
-                }
-
-            } catch (InvalidOperationException) {
-                // 이미 종료된 프로세스
-
+                if (!Directory.Exists(dir))
+                    Directory.CreateDirectory(dir);
             } catch (Exception ex) {
-                Console.WriteLine(
-                    $"프로세스 종료 실패: {ex.Message}");
+                throw new Exception($"디렉토리 생성 실패: {ex.Message}", ex);
             }
         }
 
+        /// <summary>
+        /// 파일이 존재하면 삭제합니다. 실패해도 예외를 전파하지 않습니다.
+        /// </summary>
+        private static void DeleteFileIfExists(string path) {
+            try {
+                if (File.Exists(path))
+                    File.Delete(path);
+            } catch (Exception ex) {
+                Console.WriteLine($"임시 파일 정리 실패: {ex.Message}");
+            }
+        }
 
         /// <summary>
-        /// Windows CommandLine 인자를 안전하게 따옴표 처리합니다.
+        /// null 안전하게 Progress 를 보고합니다.
         /// </summary>
-        private static string QuoteCommandLineArgument(
-            string argument) {
+        private static void ReportProgress(
+            IProgress<FFmpegProgress> progress,
+            int percentage,
+            string message) {
 
-            if (argument == null)
-                return "\"\"";
-
-            if (argument.Length == 0)
-                return "\"\"";
-
-
-            var result = new StringBuilder();
-
-            result.Append('"');
-
-            int backslashCount = 0;
-
-            foreach (char c in argument) {
-
-                if (c == '\\') {
-                    backslashCount++;
-                    continue;
-                }
-
-
-                if (c == '"') {
-
-                    // 따옴표 앞의 '\'는 2배 처리
-                    result.Append(
-                        '\\',
-                        backslashCount * 2 + 1);
-
-                    result.Append('"');
-
-                    backslashCount = 0;
-                    continue;
-                }
-
-
-                if (backslashCount > 0) {
-                    result.Append(
-                        '\\',
-                        backslashCount);
-
-                    backslashCount = 0;
-                }
-
-                result.Append(c);
-            }
-
-
-            // 마지막 따옴표 바로 앞의 '\'는
-            // 모두 2배 처리해야 함
-            if (backslashCount > 0) {
-                result.Append(
-                    '\\',
-                    backslashCount * 2);
-            }
-
-            result.Append('"');
-
-            return result.ToString();
+            progress?.Report(new FFmpegProgress {
+                Percentage = percentage,
+                Message    = message
+            });
         }
     }
 }
