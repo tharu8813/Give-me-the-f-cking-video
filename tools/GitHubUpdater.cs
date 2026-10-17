@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using System.Net.Http;
 using System.Threading.Tasks;
+using System.Threading;
 using System.Windows.Forms;
 using GMTFV.services;
 
@@ -14,7 +15,8 @@ public static class GitHubUpdater {
         string repo,
         Version currentVersion,
         ProgressBar progressBar,
-        Label statusLabel) {
+        Label statusLabel,
+        Func<bool> canInstall = null) {
         try {
             progressBar.Value = 0;
             statusLabel.Text = "GitHub 릴리즈 확인 중...";
@@ -22,7 +24,13 @@ public static class GitHubUpdater {
             HttpClient client = Tol.SharedHttpClient;
 
                 string apiUrl = $"https://api.github.com/repos/{owner}/{repo}/releases/latest";
-                string json = await client.GetStringAsync(apiUrl);
+                string json;
+                using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20)))
+                using (var response = await client.GetAsync(apiUrl, timeout.Token)) {
+                    response.EnsureSuccessStatusCode();
+                    json = await response.Content.ReadAsStringAsync();
+                }
+                if (canInstall != null && !canInstall()) return;
 
                 JObject release = JObject.Parse(json);
 
@@ -50,13 +58,9 @@ public static class GitHubUpdater {
                     return;
                 }
 
-                JArray assets = (JArray)release["assets"];
-                JToken asset = assets.FirstOrDefault(a => {
-                    string name = a["name"]?.ToString().ToLower();
-                    return name != null &&
-                           name.Contains("setup") &&
-                           name.EndsWith(".exe");
-                });
+                JArray assets = release["assets"] as JArray ?? new JArray();
+                string expectedName = "GMTFV-" + latestVersion + "-setup.exe";
+                JToken asset = assets.FirstOrDefault(a => string.Equals(a["name"]?.ToString(), expectedName, StringComparison.OrdinalIgnoreCase));
 
                 if (asset == null) {
                     Tol.ShowError("릴리즈 파일이 없습니다.");
@@ -106,11 +110,12 @@ public static class GitHubUpdater {
                 progressBar.Value = 100;
                 statusLabel.Text = "다운로드 완료! 실행중...";
 
+                if (canInstall != null && !canInstall()) { statusLabel.Text = "다운로드 작업 종료 후 업데이트를 적용해주세요."; return; }
                 System.Diagnostics.Process.Start(savePath);
                 Application.Exit();
         } catch (Exception ex) {
             statusLabel.Text = "업데이트 실패";
-            Tol.ShowError("업데이트 중 오류가 발생했습니다:\n" + ex.Message);
+            new GMTFV.DownloadEngine.DiagnosticLog().Write("app-update", ex.Message);
         }
     }
 }

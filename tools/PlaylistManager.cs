@@ -14,6 +14,15 @@ namespace GMTFV.tools {
     /// 다운로드 플레이리스트 목록의 저장(Export) 및 복원(Import) 관리를 전담하는 모듈
     /// </summary>
     public static class PlaylistManager {
+        internal static void ApplyConfiguration(VideoInfo video, ExportVideoData config) {
+            string extension = (config.SubType ?? (config.IsTypeVideo ? "mp4" : "mp3")).ToLowerInvariant();
+            if (!(config.IsTypeVideo ? Tol.VideoFormats : Tol.AudioFormats).Contains(extension))
+                throw new InvalidDataException("목록 파일에 지원하지 않는 저장 형식이 있습니다.");
+            video.TypeSave = new TypeSaveVideo { IsTypeVideo = config.IsTypeVideo, SubType = extension };
+            var selected = video.VideoQualities?.FirstOrDefault(q => q.Quality == config.Quality && (config.Fps <= 0 || q.Fps == config.Fps));
+            if (selected != null) foreach (var quality in video.VideoQualities) quality.IsSelected = quality == selected;
+        }
+
         /// <summary>
         /// 현재 영상 목록을 경량 JSON 또는 TXT 파일로 저장합니다.
         /// </summary>
@@ -81,7 +90,8 @@ namespace GMTFV.tools {
                     try {
                         jsonItems = JsonConvert.DeserializeObject<List<ExportVideoData>>(content);
                         if (jsonItems != null) {
-                            urlsToLoad = jsonItems.Where(x => !string.IsNullOrWhiteSpace(x.Url) && Tol.IsYouTubeUrl(x.Url)).Select(x => x.Url).ToList();
+                            jsonItems = jsonItems.Where(x => x != null && Tol.IsYouTubeUrl(x.Url)).ToList();
+                            urlsToLoad = jsonItems.Select(x => x.Url).ToList();
                         }
                     } catch { }
                 }
@@ -116,12 +126,15 @@ namespace GMTFV.tools {
                         progressForm.UpdateProgress(i + 1, urlsToLoad.Count, url);
 
                         try {
+                            VideoInfo previous = getLastAddedVideoFunc?.Invoke();
                             await addVideoFunc(url, progressForm.Cts.Token);
+                            VideoInfo addedVideo = getLastAddedVideoFunc?.Invoke();
+                            if (addedVideo == null || ReferenceEquals(previous, addedVideo) ||
+                                GMTFV.Core.YouTubeUrl.Normalize(url) != "https://www.youtube.com/watch?v=" + addedVideo.ID) continue;
 
                             // JSON 설정 복원
                             if (jsonItems != null && i < jsonItems.Count) {
                                 var item = jsonItems[i];
-                                var addedVideo = getLastAddedVideoFunc?.Invoke();
                                 if (addedVideo != null) {
                                     applyVideoConfigAction?.Invoke(addedVideo, item);
                                 }

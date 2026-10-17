@@ -107,34 +107,8 @@ namespace GMTFV.tools {
         // ======================
 
         public static bool IsYouTubeUrl(string url) {
-            if (string.IsNullOrWhiteSpace(url))
-                return false;
-
-            try {
-                if (!Uri.TryCreate(url, UriKind.RelativeOrAbsolute, out Uri uri))
-                    return false;
-
-                if (!uri.IsAbsoluteUri &&
-                    !Uri.TryCreate("https://" + url, UriKind.Absolute, out uri))
-                    return false;
-
-                string host = uri.Host.ToLowerInvariant();
-
-                bool isYoutubeDomain =
-                    host == "youtube.com" || host.EndsWith(".youtube.com", StringComparison.Ordinal) ||
-                    host == "youtu.be";
-
-                bool hasValidPath =
-                    uri.AbsolutePath.StartsWith("/watch") ||
-                    uri.AbsolutePath.StartsWith("/shorts") ||
-                    uri.AbsolutePath.StartsWith("/embed") ||
-                    host == "youtu.be";
-
-                return isYoutubeDomain && hasValidPath;
-            } catch (Exception ex) {
-                Console.WriteLine($"IsYouTubeUrl 오류: {ex.Message}");
-                return false;
-            }
+            try { GMTFV.Core.YouTubeUrl.Normalize(url); return true; }
+            catch (ArgumentException) { return false; }
         }
 
         // ======================
@@ -164,15 +138,9 @@ namespace GMTFV.tools {
         // 포맷 목록
         // ======================
 
-        public static readonly string[] VideoFormats =
-        {
-            "mp4", "mkv", "avi", "mov", "webm", "flv"
-        };
+        public static readonly string[] VideoFormats = GMTFV.Core.MediaFormats.Video;
 
-        public static readonly string[] AudioFormats =
-        {
-            "mp3", "m4a", "aac", "opus", "ogg", "wav", "flac"
-        };
+        public static readonly string[] AudioFormats = GMTFV.Core.MediaFormats.Audio;
 
         private const string DefaultDownloadUrl = "https://www.gyan.dev/ffmpeg/builds/ffmpeg-release-essentials.zip";
 
@@ -192,7 +160,7 @@ namespace GMTFV.tools {
 
             string ffmpegPath = Path.Combine(targetDirectory, "ffmpeg.exe");
 
-            if (File.Exists(ffmpegPath)) {
+            if (File.Exists(ffmpegPath) && File.Exists(Path.Combine(targetDirectory, "ffprobe.exe"))) {
                 progress?.Report(new FFmpegProgress {
                     Percentage = 100,
                     Message = "FFmpeg가 이미 설치되어 있습니다."
@@ -206,8 +174,8 @@ namespace GMTFV.tools {
                 throw new OperationCanceledException("사용자가 FFmpeg 다운로드를 취소했습니다.");
             }
 
-            string zipPath = Path.Combine(Path.GetTempPath(), "ffmpeg.zip");
-            string extractPath = Path.Combine(Path.GetTempPath(), "ffmpeg_extract");
+            string zipPath = Path.Combine(Path.GetTempPath(), "gmtfv-" + Guid.NewGuid().ToString("N") + ".zip");
+            string extractPath = Path.Combine(Path.GetTempPath(), "gmtfv-" + Guid.NewGuid().ToString("N"));
 
             try {
                 if (Directory.Exists(extractPath)) {
@@ -271,7 +239,18 @@ namespace GMTFV.tools {
                 if (extractedFFmpeg == null)
                     throw new FileNotFoundException("ffmpeg.exe를 찾을 수 없습니다.");
 
-                File.Copy(extractedFFmpeg, ffmpegPath, overwrite: true);
+                string extractedProbe = Path.Combine(Path.GetDirectoryName(extractedFFmpeg), "ffprobe.exe");
+                if (!File.Exists(extractedProbe)) throw new FileNotFoundException("ffprobe.exe를 찾을 수 없습니다.");
+                FileIntegrityVerifier.InstallVerifiedFile(extractedProbe, Path.Combine(targetDirectory, "ffprobe.exe"));
+                FileIntegrityVerifier.InstallVerifiedFile(extractedFFmpeg, ffmpegPath);
+                string distribution = Path.GetDirectoryName(Path.GetDirectoryName(extractedFFmpeg));
+                string notices = Path.Combine(targetDirectory, "ffmpeg-notices");
+                Directory.CreateDirectory(notices);
+                foreach (string file in Directory.GetFiles(distribution, "*", SearchOption.TopDirectoryOnly)) {
+                    string name = Path.GetFileName(file);
+                    if (name.StartsWith("LICENSE", StringComparison.OrdinalIgnoreCase) || name.StartsWith("COPYING", StringComparison.OrdinalIgnoreCase) || name.StartsWith("README", StringComparison.OrdinalIgnoreCase))
+                        File.Copy(file, Path.Combine(notices, name), true);
+                }
 
                 progress?.Report(new FFmpegProgress {
                     Percentage = 100,
@@ -321,39 +300,8 @@ namespace GMTFV.tools {
         /// <summary>
         /// 파일명에 사용할 수 없는 문자를 제거하고 안전한 파일명을 반환합니다.
         /// </summary>
-        public static string SanitizeFileName(string fileName, string replacement = "_") {
-            if (string.IsNullOrWhiteSpace(fileName)) {
-                return "unnamed";
-            }
-
-            try {
-                char[] invalidChars = Path.GetInvalidFileNameChars();
-                StringBuilder sb = new StringBuilder(fileName.Length);
-                foreach (char c in fileName) {
-                    if (Array.IndexOf(invalidChars, c) >= 0) {
-                        sb.Append(replacement);
-                    } else {
-                        sb.Append(c);
-                    }
-                }
-                string sanitized = sb.ToString().Trim();
-
-                // 빈 문자열인 경우
-                if (string.IsNullOrWhiteSpace(sanitized)) {
-                    return "unnamed";
-                }
-
-                // 길이 제한 (Windows 경로 제한 고려)
-                if (sanitized.Length > 200) {
-                    sanitized = sanitized.Substring(0, 200);
-                }
-
-                return sanitized;
-            } catch (Exception ex) {
-                Console.WriteLine($"SanitizeFileName 오류: {ex.Message}");
-                return "unnamed";
-            }
-        }
+        public static string SanitizeFileName(string fileName, string replacement = "_") =>
+            GMTFV.Core.WindowsFileName.Sanitize(fileName, replacement);
 
         /// <summary>
         /// 디렉토리가 존재하는지 확인하고, 없으면 생성합니다.
@@ -377,29 +325,6 @@ namespace GMTFV.tools {
         /// <summary>
         /// 프로세스를 안전하게 종료합니다.
         /// </summary>
-        public static void KillProcess(string processName) {
-            if (string.IsNullOrWhiteSpace(processName)) {
-                return;
-            }
-
-            try {
-                foreach (Process process in Process.GetProcessesByName(processName)) {
-                    try {
-                        if (!process.HasExited) {
-                            process.Kill();
-                            process.WaitForExit(3000);
-                        }
-                    } catch (Exception ex) {
-                        Console.WriteLine($"{processName} 프로세스 종료 오류: {ex.Message}");
-                    } finally {
-                        process?.Dispose();
-                    }
-                }
-            } catch (Exception ex) {
-                Console.WriteLine($"{processName} 프로세스 검색 오류: {ex.Message}");
-            }
-        }
-
         /// <summary>
         /// 파일 크기를 사람이 읽기 쉬운 형식으로 변환합니다.
         /// </summary>

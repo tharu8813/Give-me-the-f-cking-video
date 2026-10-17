@@ -1,5 +1,6 @@
-﻿using GMTFV.tools;
+using GMTFV.tools;
 using System;
+using System.Linq;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -18,6 +19,13 @@ namespace GMTFV.Start {
             button2.Text = "다운로드 목록에 추가";
             AcceptButton = button2;
             CancelButton = null;
+            Height += 35;
+            hintLabel.Top += 35;
+            textBox1.Height = 56;
+            textBox1.Multiline = true;
+            textBox1.ScrollBars = ScrollBars.Vertical;
+            hintLabel.Text = "여러 URL을 줄바꿈으로 붙여넣기 · Enter로 추가";
+            textBox1.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter && !e.Shift) { e.SuppressKeyPress = true; button2.PerformClick(); } };
             textBox1.Focus();
         }
 
@@ -31,14 +39,14 @@ namespace GMTFV.Start {
         }
 
         private void button2_Click(object sender, EventArgs e) {
-            if (!Tol.IsYouTubeUrl(textBox1.Text)) {
-                Tol.ShowError("해당 주소는 유튜브 주소가 아닙니다.");
+            string[] urls = textBox1.Text.Split(new[] { '\r', '\n', ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+            if (urls.Length == 0 || !urls.All(Tol.IsYouTubeUrl)) {
+                Tol.ShowError("유효한 유튜브 영상 URL을 입력하세요.");
                 return;
             }
-
-            Result = textBox1.Text;
+            Result = string.Join("\n", urls.Select(GMTFV.Core.YouTubeUrl.Normalize).Distinct());
             DialogResult = DialogResult.OK;
-            Dispose();
+            Close();
         }
 
         // 버튼 호버 효과

@@ -1,4 +1,8 @@
+using GMTFV.Core;
+using GMTFV.DownloadEngine;
 using GMTFV.models;
+using VideoMetadataService = GMTFV.services.VideoMetadataService;
+using YtDlpDownloadCommandFactory = GMTFV.services.YtDlpDownloadCommandFactory;
 using GMTFV.Properties;
 using GMTFV.services;
 using GMTFV.tools;
@@ -36,7 +40,11 @@ namespace GMTFV.Start {
        private bool isChromeTabImportAvailable;
 
         private bool isClosing = false;
-        private readonly DownloadProcessTracker processTracker = new DownloadProcessTracker();
+        private readonly CancellationTokenSource lifetime = new CancellationTokenSource();
+        private readonly Dictionary<string, CancellationTokenSource> itemCancellations = new Dictionary<string, CancellationTokenSource>();
+        private List<VideoInfo> retryItems;
+        private readonly ContextMenuStrip downloadMenu = new ContextMenuStrip();
+        private readonly HashSet<string> pendingUrls = new HashSet<string>();
         private readonly Label emptyStateLabel = new Label();
         private readonly Dictionary<Button, Color> buttonBaseColors = new Dictionary<Button, Color>();
 
@@ -47,17 +55,8 @@ namespace GMTFV.Start {
         public enum DownloadStatus {
             None,
             Success,
-            Failed
-        }
-
-        private enum DownloadPhase {
-            Video,
-            Audio,
-            Merging,
-            Processing,
-            Finishing,
-            Completed,
-            Downloading
+            Failed,
+            Cancelled
         }
 
         public MainForm() {
@@ -65,6 +64,37 @@ namespace GMTFV.Start {
             ApplyUserExperience();
             chromeTabImportService.TabsReceived += ChromeTabImportService_TabsReceived;
             isChromeTabImportAvailable = chromeTabImportService.Start();
+            downloadMenu.Items.Add("실패한 항목만 다시 시도", null, (_, __) => {
+                if (isDownloading) return;
+                retryItems = AllList.Where(v => downloadStatusMap.TryGetValue(v.ID, out DownloadStatus state) && state == DownloadStatus.Failed).ToList();
+                if (retryItems.Count == 0) { retryItems = null; return; }
+                button4_Click(button4, EventArgs.Empty);
+            });
+            downloadMenu.Items.Add("정보 조회 다시 시도", null, async (_, __) => {
+                if (isDownloading) return;
+                var rows = dataGridView1.SelectedRows.Cast<DataGridViewRow>().Where(row => row.Tag is string && row.Cells[0].Value is VideoInfo video && string.IsNullOrEmpty(video.ID)).ToList();
+                foreach (var row in rows) {
+                    string url = (string)row.Tag;
+                    dataGridView1.Rows.Remove(row);
+                    await AddVideoAsync(url);
+                }
+            });
+            downloadMenu.Items.Add("선택 항목 다운로드 취소", null, (_, __) => {
+                foreach (DataGridViewRow row in dataGridView1.SelectedRows)
+                    if (row.Cells[0].Value is VideoInfo video && itemCancellations.TryGetValue(video.ID, out var cts)) cts.Cancel();
+            });
+            downloadMenu.Items.Add("상세 로그 폴더 열기", null, (_, __) => {
+                string path = new DiagnosticLog().DirectoryPath;
+                Directory.CreateDirectory(path);
+                Process.Start("explorer.exe", GMTFV.DownloadEngine.CommandLine.Quote(path));
+            });
+            dataGridView1.ContextMenuStrip = downloadMenu;
+            dataGridView1.Columns.Add(new DataGridViewTextBoxColumn { Name = "DownloadOptions", HeaderText = "화질 / 형식", Width = 125, ReadOnly = true });
+            dataGridView1.Columns.Add(new DataGridViewTextBoxColumn { Name = "DownloadState", HeaderText = "상태", Width = 115, ReadOnly = true });
+            dataGridView1.Columns["Image"].Width = 80;
+            dataGridView1.Columns["By"].Width = 100;
+            dataGridView1.Columns["Upload"].Width = 85;
+            dataGridView1.Columns["Info"].Width = 50;
         }
 
         /// <summary>디자이너로 설정할 수 없는 런타임 초기화를 한 곳에서 관리합니다.</summary>
@@ -134,9 +164,10 @@ namespace GMTFV.Start {
 
         private async void ChromeTabImportService_TabsReceived(object sender, IReadOnlyList<string> urls) {
             if (IsDisposed || isClosing) return;
+            if (InvokeRequired) { BeginInvoke((Action)(() => ChromeTabImportService_TabsReceived(sender, urls))); return; }
             await InvokeAsync(() => label8.Text = $"Chrome에서 {urls.Count}개 YouTube 탭을 받았습니다. 목록에 추가하는 중…");
             foreach (string url in urls) if (!isClosing) await AddVideoAsync(url);
-            if (!IsDisposed && !isClosing) label8.Text = $"Chrome 탭 {urls.Count}개 가져오기 완료";
+            if (!IsDisposed && !isClosing) label8.Text = isDownloading ? $"다운로드 종료 후 URL {pendingUrls.Count}개 추가 예정" : $"Chrome 탭 {urls.Count}개 가져오기 완료";
         }
 
         private async void MainForm_KeyDown(object sender, KeyEventArgs e) {
@@ -147,10 +178,10 @@ namespace GMTFV.Start {
             }
 
             if (e.Control && e.KeyCode == Keys.V && Clipboard.ContainsText()) {
-                string url = Clipboard.GetText().Trim();
-                if (Tol.IsYouTubeUrl(url)) {
+                string[] urls = Clipboard.GetText().Split(new[] { '\r', '\n', ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries);
+                if (urls.Length > 0 && urls.All(Tol.IsYouTubeUrl)) {
                     e.SuppressKeyPress = true;
-                    await AddVideoAsync(url);
+                    foreach (string url in urls.Distinct()) if (!isClosing) await AddVideoAsync(url);
                 }
             }
         }
@@ -178,67 +209,8 @@ namespace GMTFV.Start {
             }
         }
 
-        private static string GetPhaseIndicator(DownloadPhase phase) {
-            const string video = "① 영상";
-            const string audio = "② 오디오";
-            const string merge = "③ 병합";
-            const string process = "④ 변환";
-            const string finish = "⑤ 완료";
-
-            switch (phase) {
-                case DownloadPhase.Video: return $"[{video}] → {audio} → {merge} → {process} → {finish}";
-                case DownloadPhase.Audio: return $"{video} → [{audio}] → {merge} → {process} → {finish}";
-                case DownloadPhase.Merging: return $"{video} → {audio} → [{merge}] → {process} → {finish}";
-                case DownloadPhase.Processing: return $"{video} → {audio} → {merge} → [{process}] → {finish}";
-                case DownloadPhase.Finishing: return $"{video} → {audio} → {merge} → {process} → [{finish}]";
-                case DownloadPhase.Completed: return $"{video} → {audio} → {merge} → {process} → [✓ 완료]";
-                default: return $"[{video}/{audio}] → {merge} → {process} → {finish}";
-            }
-        }
-
-        private static bool TryGetFfmpegProgressPercent(string line, TimeSpan duration, out int percent) {
-            percent = 0;
-            if (duration <= TimeSpan.Zero || string.IsNullOrWhiteSpace(line)) return false;
-
-            string[] parts = line.Split(new[] { '=' }, 2);
-            if (parts.Length != 2 || (parts[0] != "out_time_ms" && parts[0] != "out_time_us")) return false;
-            if (!long.TryParse(parts[1], out long rawTime) || rawTime < 0) return false;
-
-            // FFmpeg 버전별 out_time_ms의 밀리초/마이크로초 표기 차이를 모두 처리합니다.
-            double elapsedSeconds = parts[0] == "out_time_us" || rawTime > duration.TotalMilliseconds * 10
-                ? rawTime / 1000000d
-                : rawTime / 1000d;
-            percent = Math.Min(100, Math.Max(0, (int)Math.Round(elapsedSeconds / duration.TotalSeconds * 100)));
-            return true;
-        }
-
-        private void ReportMergeProgress(int progressBarIndex, int currentFile, int totalFiles, string displayTitle, int mergePercent) {
-            if (isClosing) return;
-            try {
-                Action update = () => {
-                    string title = displayTitle ?? "영상";
-                    if (title.Length > 28) title = title.Substring(0, 25) + "...";
-                    int overallPercent = 90 + (mergePercent * 9 / 100);
-                    string message = $"🔗 영상+오디오 병합 중... {mergePercent}%";
-                    string phase = GetPhaseIndicator(DownloadPhase.Merging);
-
-                    if (progressBarIndex >= 0 && progressBarIndex < dynamicProgressBars.Count) {
-                        UpdateDynamicProgressBar(progressBarIndex, overallPercent,
-                            $"{phase}\n{title} · {message}", ProgressBarStyle.Continuous);
-                    } else {
-                        progressBar1.Style = ProgressBarStyle.Continuous;
-                        progressBar1.Value = Math.Min(overallPercent, 99);
-                        label8.Text = $"{phase}\n[{currentFile}/{totalFiles}] {message} · {title}";
-                    }
-                };
-
-                if (InvokeRequired) BeginInvoke(update); else update();
-            } catch (ObjectDisposedException) {
-            } catch (InvalidOperationException) {
-            }
-        }
-
         private async Task AddVideoAsync(string url, CancellationToken cancellationToken = default) {
+            if (isClosing) return;
             if (string.IsNullOrWhiteSpace(url)) {
                 MessageBox.Show("URL이 비어있습니다.", "알림", MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
@@ -252,6 +224,8 @@ namespace GMTFV.Start {
                 return;
             }
 
+            if (AllList.Any(video => "https://www.youtube.com/watch?v=" + video.ID == normalizedUrl)) return;
+            if (isDownloading) { pendingUrls.Add(normalizedUrl); return; }
             lock (loadingUrlsLock) {
                 if (loadingUrls.Contains(normalizedUrl)) {
                     MessageBox.Show("이미 추가 중인 URL입니다.", "알림", MessageBoxButtons.OK, MessageBoxIcon.Asterisk);
@@ -260,7 +234,7 @@ namespace GMTFV.Start {
                 loadingUrls.Add(normalizedUrl);
                 // 설정 버튼 상태 업데이트
                 try {
-                    Invoke(new Action(() => button2.Enabled = false));
+                    Invoke(new Action(() => { button2.Enabled = false; button3.Enabled = false; }));
                 } catch { }
             }
 
@@ -271,7 +245,9 @@ namespace GMTFV.Start {
             CancellationTokenSource cts = null;
 
             try {
-                await loadingSemaphore.WaitAsync();
+                cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, lifetime.Token);
+                cts.CancelAfter(TimeSpan.FromSeconds(60));
+                await loadingSemaphore.WaitAsync(cts.Token);
                 semaphoreAcquired = true;
 
                 url = normalizedUrl;
@@ -279,8 +255,6 @@ namespace GMTFV.Start {
                 Console.WriteLine("===== AddVideoAsync 시작 =====");
                 Console.WriteLine("입력 URL: " + url);
 
-                cts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-                cts.CancelAfter(TimeSpan.FromSeconds(30));
 
                 tempRowIndex = await AddTemporaryRow(url);
 
@@ -309,6 +283,7 @@ namespace GMTFV.Start {
                     Console.WriteLine($"썸네일 다운로드 실패 (계속 진행): {ex.Message}");
                 }
 
+                cts.Token.ThrowIfCancellationRequested();
                 videoInfo = new VideoInfo {
                     Title = videoData.Title ?? url,
                     ID = videoData.Id,
@@ -393,7 +368,7 @@ namespace GMTFV.Start {
                 Console.WriteLine($"오류 발생: {ex}");
 
                 if (!hasPartialData || videoInfo == null) {
-                    await HandleVideoLoadFailureAsync(tempRowIndex, url, ex.Message);
+                    await HandleVideoLoadFailureAsync(tempRowIndex, url, RecoveryPolicy.Message(RecoveryPolicy.Classify(ex)));
                 } else {
                     try {
                         await UpdateRowWithVideoInfoAsync(tempRowIndex, videoInfo, videoInfo.Image);
@@ -415,7 +390,7 @@ namespace GMTFV.Start {
                     // 로딩 중인 URL이 모두 제거되었으면 설정 버튼 활성화
                     if (loadingUrls.Count == 0) {
                         try {
-                            Invoke(new Action(() => button2.Enabled = true));
+                            Invoke(new Action(() => { if (!isDownloading && !isClosing) { button2.Enabled = true; button3.Enabled = true; } }));
                         } catch { }
                     }
                 }
@@ -425,7 +400,7 @@ namespace GMTFV.Start {
                     // 로딩 중인 URL이 모두 제거되었으면 설정 버튼 활성화
                     if (loadingUrls.Count == 0) {
                         try {
-                            Invoke(new Action(() => button2.Enabled = true));
+                            Invoke(new Action(() => { if (!isDownloading && !isClosing) { button2.Enabled = true; button3.Enabled = true; } }));
                         } catch { }
                     }
                 }
@@ -452,6 +427,8 @@ namespace GMTFV.Start {
                         ""
                     });
                     dataGridView1.Rows[rowIndex].DefaultCellStyle.BackColor = Color.LightYellow;
+                    dataGridView1.Rows[rowIndex].Tag = url;
+                    dataGridView1.Rows[rowIndex].Cells["DownloadState"].Value = "정보 조회 중";
                 } catch (Exception ex) {
                     Console.WriteLine($"임시 행 추가 실패: {ex.Message}");
                 }
@@ -462,8 +439,11 @@ namespace GMTFV.Start {
         private async Task UpdateRowWithVideoInfoAsync(int rowIndex, VideoInfo videoInfo, Image thumbnailImage) {
             await InvokeAsync(() => {
                 try {
-                    if (rowIndex >= 0 && rowIndex < dataGridView1.Rows.Count && !dataGridView1.Rows[rowIndex].IsNewRow) {
-                        DataGridViewRow row = dataGridView1.Rows[rowIndex];
+                    DataGridViewRow row = dataGridView1.Rows.Cast<DataGridViewRow>().FirstOrDefault(item =>
+                        item.Tag as string == "https://www.youtube.com/watch?v=" + videoInfo.ID);
+                    if (row != null) {
+                        row.Tag = null;
+                        row.ErrorText = string.Empty;
                         row.Cells[0].Value = videoInfo;
                         row.Cells[1].Value = false;
                         row.Cells[2].Value = AllList.IndexOf(videoInfo) + 1;
@@ -473,6 +453,8 @@ namespace GMTFV.Start {
                         row.Cells[6].Value = videoInfo.VideoLength;
                         row.Cells[7].Value = videoInfo.UploadDate;
                         row.Cells[8].Value = "보기";
+                        row.Cells["DownloadOptions"].Value = DescribeOptions(videoInfo);
+                        row.Cells["DownloadState"].Value = "준비 완료";
                         row.DefaultCellStyle.BackColor = Color.White;
                     }
                 } catch (Exception ex) {
@@ -484,7 +466,8 @@ namespace GMTFV.Start {
         private async Task HandleVideoLoadFailureAsync(int rowIndex, string url, string errorMessage) {
             await InvokeAsync(() => {
                 try {
-                    if (rowIndex >= 0 && rowIndex < dataGridView1.Rows.Count && !dataGridView1.Rows[rowIndex].IsNewRow) {
+                    DataGridViewRow failedRow = dataGridView1.Rows.Cast<DataGridViewRow>().FirstOrDefault(item => item.Tag as string == url);
+                    if (failedRow != null) {
                         VideoInfo failedVideoInfo = new VideoInfo {
                             Title = url,
                             ID = "",
@@ -504,11 +487,9 @@ namespace GMTFV.Start {
                             IsSelected = true
                         });
 
-                        lock (allListLock) {
-                            AllList.Add(failedVideoInfo);
-                        }
-
-                        DataGridViewRow row = dataGridView1.Rows[rowIndex];
+                        DataGridViewRow row = failedRow;
+                        row.Tag = url;
+                        row.ErrorText = errorMessage;
                         row.Cells[0].Value = failedVideoInfo;
                         row.Cells[1].Value = false;
                         row.Cells[2].Value = AllList.Count;
@@ -519,9 +500,10 @@ namespace GMTFV.Start {
                         row.Cells[7].Value = DateTime.Now;
                         row.Cells[8].Value = "보기";
                         row.DefaultCellStyle.BackColor = Color.LightCoral;
+                        row.Cells["DownloadState"].Value = "정보 조회 실패";
 
                         MessageBox.Show(
-                            $"영상 정보를 가져오는 중 오류가 발생했습니다.\n\nURL: {url}\n오류: {errorMessage}\n\n영상은 목록에 유지되지만 정보가 제한적입니다.",
+                            $"영상 정보를 가져오지 못했습니다.\n{errorMessage}\n\n목록에서 우클릭 → 정보 조회 다시 시도로 재시도할 수 있습니다.",
                             "경고",
                             MessageBoxButtons.OK,
                             MessageBoxIcon.Exclamation);
@@ -592,8 +574,6 @@ namespace GMTFV.Start {
 
                     downloadCancellationTokenSource?.Cancel();
 
-                    // yt-dlp 및 ffmpeg 프로세스 즉시 종결
-                    processTracker.KillAllActiveProcesses();
                 } else {
                     e.Cancel = true;
                     isClosing = false;
@@ -624,27 +604,12 @@ namespace GMTFV.Start {
                 }
             }
 
+            lifetime.Cancel();
+            downloadCancellationTokenSource?.Cancel();
             CleanupResources();
             chromeTabImportService.Dispose();
 
             base.OnFormClosing(e);
-        }
-
-        private void KillProcessesSafely(string processName) {
-            try {
-                foreach (Process process in Process.GetProcessesByName(processName)) {
-                    try {
-                        if (!process.HasExited) {
-                            process.Kill();
-                            process.WaitForExit(3000);
-                        }
-                    } catch (Exception ex) {
-                        Console.WriteLine($"{processName} 프로세스 종료 오류: {ex.Message}");
-                    }
-                }
-            } catch (Exception ex) {
-                Console.WriteLine($"{processName} 프로세스 검색 오류: {ex.Message}");
-            }
         }
 
         private void CleanupResources() {
@@ -659,17 +624,6 @@ namespace GMTFV.Start {
                     }
                 }
 
-                try {
-                    loadingSemaphore?.Dispose();
-                } catch (Exception ex) {
-                    Console.WriteLine($"SemaphoreSlim 정리 오류: {ex.Message}");
-                }
-
-                try {
-                    downloadCancellationTokenSource?.Dispose();
-                } catch (Exception ex) {
-                    Console.WriteLine($"CancellationTokenSource 정리 오류: {ex.Message}");
-                }
             } catch (Exception ex) {
                 Console.WriteLine($"리소스 정리 중 오류: {ex.Message}");
             }
@@ -801,6 +755,7 @@ namespace GMTFV.Start {
                 if (e.RowIndex >= dataGridView1.Rows.Count) return;
 
                 if (dataGridView1.Columns[e.ColumnIndex].Name == "Info") {
+                    if (isDownloading) return;
                     DataGridViewRow row = dataGridView1.Rows[e.RowIndex];
                     if (row.IsNewRow) return;
 
@@ -814,7 +769,9 @@ namespace GMTFV.Start {
                         return;
                     }
 
-                    new VideoInfoForm(videoInfo).ShowDialog();
+                    if (string.IsNullOrEmpty(videoInfo.ID)) return;
+                    using (var options = new VideoInfoForm(videoInfo)) options.ShowDialog();
+                    row.Cells["DownloadOptions"].Value = DescribeOptions(videoInfo);
                 }
             } catch (Exception ex) {
                 MessageBox.Show(
@@ -827,9 +784,11 @@ namespace GMTFV.Start {
 
         private async void button2_Click(object sender, EventArgs e) {
             try {
-                AddURL addURL = new AddURL();
+                using (AddURL addURL = new AddURL()) {
                 if (addURL.ShowDialog() == DialogResult.OK && !string.IsNullOrWhiteSpace(addURL.Result)) {
-                    await AddVideoAsync(addURL.Result.Trim());
+                    foreach (string url in addURL.Result.Split(new[] { '\r', '\n', ' ', '\t' }, StringSplitOptions.RemoveEmptyEntries).Distinct())
+                        if (!isClosing) await AddVideoAsync(url);
+                }
                 }
             } catch (Exception ex) {
                 MessageBox.Show(
@@ -917,8 +876,6 @@ namespace GMTFV.Start {
                         downloadCancellationTokenSource.Cancel();
                     }
 
-                    // 활성 프로세스 및 실행 중인 CLI 프로세스 강제 종결
-                    processTracker.KillAllActiveProcesses();
                 } catch (Exception ex) {
                     Console.WriteLine($"취소 처리 중 오류: {ex.Message}");
                 }
@@ -959,17 +916,17 @@ namespace GMTFV.Start {
             }
 
             isDownloading = true;
-            downloadCancellationTokenSource = new CancellationTokenSource();
+            downloadCancellationTokenSource = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
 
             // 동시 다운로드 수 설정
-            int maxConcurrent = Settings.Default.MaxConcurrentDownloads;
+            int maxConcurrent = Math.Max(1, Math.Min(5, Settings.Default.MaxConcurrentDownloads));
             downloadQueue = new DownloadQueueService(maxConcurrent);
 
             // 다운로드 중에는 button4를 제외한 다른 버튼들만 비활성화
             button1.Enabled = false;
             button2.Enabled = false;
             button3.Enabled = false;
-            dataGridView1.Enabled = false;
+            dataGridView1.ReadOnly = true;
 
             // button4를 활성화하고 텍스트/색상 변경 (취소 버튼으로 표시)
             button4.Enabled = true;
@@ -988,17 +945,20 @@ namespace GMTFV.Start {
             List<string> failedVideos = new List<string>();
             int successCount = 0;
             int completedCount = 0;
+            int cancelledCount = 0;
 
             try {
-                int total = AllList.Count;
+                var batch = retryItems ?? AllList.ToList();
+                retryItems = null;
+                int total = batch.Count;
                 int currentFileNumber = 1;
 
                 // 토탈 진행률 초기 표시
                 UpdateTotalProgress(0, total, 0, 0);
 
-                // 동시 다운로드 구현: Task 목록으로 병렬 다운로드
+                // Process I/O runs asynchronously; UI state stays on the UI thread.
                 var downloadTasks = new List<Task>();
-                foreach (VideoInfo videoInfo in AllList.ToList()) {
+                foreach (VideoInfo videoInfo in batch) {
                     if (downloadCancellationTokenSource.Token.IsCancellationRequested) {
                         MessageBox.Show("다운로드가 취소되었습니다. 현재까지 다운로드한 영상은 유지됩니다.", "알림", MessageBoxButtons.OK, MessageBoxIcon.Asterisk);
                         break;
@@ -1007,10 +967,15 @@ namespace GMTFV.Start {
                     int fileNumber = currentFileNumber;
 
                     // 각 비디오마다 Task 생성하여 동시 다운로드 시작
-                    Task downloadTask = Task.Run(async () => {
-                        int barIndex = await downloadQueue.AcquireSlotAsync(downloadCancellationTokenSource.Token);
-
+                    var itemCts = CancellationTokenSource.CreateLinkedTokenSource(downloadCancellationTokenSource.Token);
+                    itemCancellations[videoInfo.ID] = itemCts;
+                    downloadStatusMap[videoInfo.ID] = DownloadStatus.None;
+                    var queuedRow = dataGridView1.Rows.Cast<DataGridViewRow>().FirstOrDefault(row => row.Cells[0].Value == videoInfo);
+                    if (queuedRow != null) queuedRow.Cells["DownloadState"].Value = "대기";
+                    Func<Task> runItem = async () => {
+                        int barIndex = -1;
                         try {
+                            barIndex = await downloadQueue.AcquireSlotAsync(itemCts.Token);
                             int currentRowIndex = -1;
                             try {
                                 if (!isClosing && dataGridView1.IsHandleCreated) {
@@ -1035,6 +1000,7 @@ namespace GMTFV.Start {
                                     Invoke((Action)(() => {
                                         if (currentRowIndex < dataGridView1.Rows.Count) {
                                             dataGridView1.Rows[currentRowIndex].DefaultCellStyle.BackColor = Color.FromArgb(255, 243, 205);
+                                            dataGridView1.Rows[currentRowIndex].ErrorText = string.Empty;
                                         }
                                     }));
                                 }
@@ -1051,21 +1017,15 @@ namespace GMTFV.Start {
                                     fileNumber);
                                 string videoFile = Path.Combine(savePath, fileName);
 
-                                // Windows 경로 최대 길이(260) 초과 시 단축
-                                if (videoFile.Length > 250) {
-                                    string ext2 = Path.GetExtension(fileName);
-                                    string nameOnly = Path.GetFileNameWithoutExtension(fileName);
-                                    nameOnly  = nameOnly.Substring(0, Math.Min(nameOnly.Length, 50));
-                                    videoFile = Path.Combine(savePath, nameOnly + ext2);
-                                }
-
+                                // Legacy path budget is enforced centrally by the engine.
+                                videoFile = WindowsFileName.FitPath(videoFile);
                                 // yt-dlp로 다운로드 (프로그래스바 인덱스와 콜백 전달)
                                 bool downloadSuccess = await DownloadWithYtDlp(
                                     videoInfo,
                                     videoFile,
                                     fileNumber,
                                     total,
-                                    downloadCancellationTokenSource.Token,
+                                    itemCts.Token,
                                     barIndex);
 
                                 if (downloadSuccess) {
@@ -1089,6 +1049,7 @@ namespace GMTFV.Start {
                                         Invoke((Action)(() => {
                                             if (currentRowIndex < dataGridView1.Rows.Count) {
                                                 dataGridView1.Rows[currentRowIndex].DefaultCellStyle.BackColor = Color.LightGreen;
+                                            dataGridView1.Rows[currentRowIndex].Cells["DownloadState"].Value = "완료";
                                             }
                                         }));
                                     }
@@ -1096,6 +1057,10 @@ namespace GMTFV.Start {
                                     throw new Exception("다운로드 실패");
                                 }
                             } catch (OperationCanceledException) {
+                                cancelledCount++;
+                                completedCount++;
+                                UpdateTotalProgress(completedCount, total, successCount, failedVideos.Count);
+                                downloadStatusMap[videoInfo.ID] = DownloadStatus.Cancelled;
                                 Console.WriteLine("다운로드가 사용자에 의해 취소되었습니다.");
                                 if (barIndex >= 0) {
                                     UpdateDynamicProgressBar(barIndex, 0, $"❌ 취소됨 ({fileNumber}/{total})");
@@ -1104,6 +1069,7 @@ namespace GMTFV.Start {
                                     Invoke((Action)(() => {
                                         if (currentRowIndex < dataGridView1.Rows.Count) {
                                             dataGridView1.Rows[currentRowIndex].DefaultCellStyle.BackColor = Color.White;
+                                            dataGridView1.Rows[currentRowIndex].Cells["DownloadState"].Value = "취소됨";
                                         }
                                     }));
                                 }
@@ -1127,16 +1093,25 @@ namespace GMTFV.Start {
                                     Invoke((Action)(() => {
                                         if (currentRowIndex < dataGridView1.Rows.Count) {
                                             dataGridView1.Rows[currentRowIndex].DefaultCellStyle.BackColor = Color.LightCoral;
+                                            dataGridView1.Rows[currentRowIndex].Cells["DownloadState"].Value = "실패";
+                                            dataGridView1.Rows[currentRowIndex].ErrorText = ex.Message;
                                         }
                                     }));
                                 }
                             }
+                        } catch (OperationCanceledException) {
+                            cancelledCount++;
+                            completedCount++;
+                            UpdateTotalProgress(completedCount, total, successCount, failedVideos.Count);
+                            downloadStatusMap[videoInfo.ID] = DownloadStatus.Cancelled;
+                            if (!isClosing && queuedRow != null) queuedRow.Cells["DownloadState"].Value = "취소됨";
                         } finally {
+                            itemCancellations.Remove(videoInfo.ID);
+                            itemCts.Dispose();
                             downloadQueue.ReleaseSlot(barIndex);
                         }
-                    }, downloadCancellationTokenSource.Token);
-
-                    downloadTasks.Add(downloadTask);
+                    };
+                    downloadTasks.Add(runItem());
                     currentFileNumber++;
                 }
 
@@ -1149,12 +1124,13 @@ namespace GMTFV.Start {
                     Console.WriteLine($"Task.WhenAll 예외 발생: {ex.Message}");
                 }
 
+                if (isClosing || IsDisposed) return;
                 if (downloadCancellationTokenSource != null && downloadCancellationTokenSource.Token.IsCancellationRequested) {
                     label8.Text = "🛑 다운로드가 취소되었습니다.";
                     label8.ForeColor = Color.OrangeRed;
-                    MessageBox.Show("다운로드가 취소되었습니다. 작업 중이던 임시 파일은 정리되었습니다.", "취소 완료", MessageBoxButtons.OK, MessageBoxIcon.Information);
+                    MessageBox.Show("다운로드가 취소되었습니다. 완료 파일은 유지되며 임시 파일은 작업 폴더에 보존됩니다.", "취소 완료", MessageBoxButtons.OK, MessageBoxIcon.Information);
                 } else {
-                    string message = $"다운로드 완료!\n성공: {successCount}/{total}";
+                    string message = $"다운로드 작업 종료\n성공: {successCount}/{total}\n취소: {cancelledCount}";
                     if (failedVideos.Count > 0) {
                         message += $"\n실패: {failedVideos.Count}\n\n실패한 영상:\n";
                         message += string.Join("\n", failedVideos.Take(5));
@@ -1170,6 +1146,7 @@ namespace GMTFV.Start {
                         failedVideos.Count > 0 ? MessageBoxIcon.Exclamation : MessageBoxIcon.Asterisk);
                 }
             } catch (Exception ex) {
+                if (isClosing || IsDisposed) return;
                 MessageBox.Show(
                     $"다운로드 중 오류가 발생했습니다:\n{ex.Message}",
                     "오류",
@@ -1182,278 +1159,58 @@ namespace GMTFV.Start {
                 try { downloadQueue?.Dispose(); } catch { }
                 downloadQueue = null;
 
-                // 컨트롤 상태 100% 복원
-                Invoke((Action)(() => {
+                // Closing forms no longer own UI controls.
+                if (!isClosing && !IsDisposed) {
                     button1.Enabled = true;
                     button2.Enabled = true;
                     button3.Enabled = true;
                     dataGridView1.Enabled = true;
+                    dataGridView1.ReadOnly = false;
 
                     button4.Enabled = true;
                     button4.Text = "⬇️ 다운로드 시작";
                     button4.BackColor = buttonBaseColors[button4];
                     button4.ForeColor = Color.White;
                     button4.Refresh();
-                }));
+                }
 
                 // 동적 프로그레스 바 정리
-                ClearDynamicProgressBars();
+                if (!isClosing && !IsDisposed) ClearDynamicProgressBars();
+                if (!isClosing && pendingUrls.Count > 0) {
+                    var urls = pendingUrls.ToList(); pendingUrls.Clear();
+                    foreach (string url in urls) await AddVideoAsync(url);
+                }
             }
         }
 
+        private static string DescribeOptions(VideoInfo video) {
+            string quality = (video.TypeSave?.IsTypeVideo ?? true) ? video.VideoQualities?.FirstOrDefault(item => item.IsSelected)?.ToString() ?? "최고 화질" : "오디오";
+            return quality + " / " + (video.TypeSave?.SubType ?? "mp4");
+        }
+
         private async Task<bool> DownloadWithYtDlp(VideoInfo videoInfo, string outputPath, int currentFile, int totalFiles, CancellationToken cancellationToken, int progressBarIndex = -1) {
-            string ytdlpPath = Path.Combine(Tol.AppdataPath, "yt-dlp.exe");
-
-            if (!File.Exists(ytdlpPath)) {
-                throw new Exception("yt-dlp.exe를 찾을 수 없습니다.");
-            }
-
-            YtDlpDownloadCommand command = YtDlpDownloadCommandFactory.Create(
-                videoInfo,
-                outputPath,
-                Tol.AppdataPath,
-                GetVideoEncoder(),
-                Settings.Default.AudioBitrate);
-            string desiredExtension = command.DesiredExtension;
-            string arguments = command.Arguments;
-
-            Console.WriteLine($"[yt-dlp 명령어] {ytdlpPath} {arguments}");
-
-            ProcessStartInfo startInfo = new ProcessStartInfo {
-                FileName = ytdlpPath,
-                Arguments = arguments,
-                RedirectStandardOutput = true,
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true,
-                StandardOutputEncoding = Encoding.UTF8
-            };
-
-            Process process = null;
-            DateTime lastUiReportTime = DateTime.MinValue;
-            bool isMerging = false;
-            int lastMergePercent = -1;
-
-            try {
-                process = new Process { StartInfo = startInfo };
-                StringBuilder error = new StringBuilder();
-
-                process.OutputDataReceived += (sender, e) => {
-                    if (!string.IsNullOrEmpty(e.Data)) {
-                        Console.WriteLine($"[yt-dlp] {e.Data}");
-
-                        try {
-                            string displayTitle = videoInfo.Title;
-                            if (displayTitle.Length > 30) {
-                                displayTitle = displayTitle.Substring(0, 27) + "...";
-                            }
-
-                            string statusMessage = "";
-                            int? currentPercent = null;
-                            ProgressBarStyle statusStyle = ProgressBarStyle.Continuous;
-                            DownloadPhase phase = DownloadPhase.Downloading;
-
-                            // 다운로드 속도 파싱 (예: 3.25MiB/s, 500KiB/s)
-                            string speedText = "";
-                            Match speedMatch = Regex.Match(e.Data, @"(\d+(?:\.\d+)?\s*[KMGT]?i?B/s)", RegexOptions.IgnoreCase);
-                            if (speedMatch.Success) {
-                                speedText = $" ⚡ {speedMatch.Groups[1].Value}";
-                            }
-
-                            // 1. 다운로드 진행률 파싱
-                            if (e.Data.Contains("[download]") && e.Data.Contains("%")) {
-                                statusStyle = ProgressBarStyle.Continuous;
-                                int percentIndex = e.Data.IndexOf("%");
-                                if (percentIndex > 0) {
-                                    string percentStr = e.Data.Substring(0, percentIndex);
-                                    int lastSpaceIndex = percentStr.LastIndexOf(' ');
-                                    if (lastSpaceIndex > 0) {
-                                        percentStr = percentStr.Substring(lastSpaceIndex + 1).Trim();
-                                        if (double.TryParse(percentStr, out double percent)) {
-                                            currentPercent = (int)percent;
-
-                                            if (e.Data.Contains("video") || e.Data.Contains("webm") || e.Data.Contains("mp4")) {
-                                                statusMessage = $"🎬 영상 다운로드 중... {currentPercent}%{speedText}";
-                                                phase = DownloadPhase.Video;
-                                            } else if (e.Data.Contains("audio") || e.Data.Contains("m4a") || e.Data.Contains("opus")) {
-                                                statusMessage = $"🎵 오디오 다운로드 중... {currentPercent}%{speedText}";
-                                                phase = DownloadPhase.Audio;
-                                            } else {
-                                                statusMessage = $"⬇️ 다운로드 중... {currentPercent}%{speedText}";
-                                            }
-                                        }
-                                    }
-                                }
-                            }
-                            // 2. 병합 작업 (Marquee 블록 형태 적용)
-                            else if (e.Data.Contains("[Merger]") || e.Data.Contains("Merging formats")) {
-                                isMerging = true;
-                                statusMessage = "🔗 영상+오디오 병합 중...";
-                                currentPercent = 95;
-                                statusStyle = ProgressBarStyle.Marquee;
-                                phase = DownloadPhase.Merging;
-                            }
-                            // 3. 오디오 변환 (AAC 인코딩 등)
-                            else if (e.Data.Contains("[ExtractAudio]") || e.Data.Contains("Destination:") ||
-                                     e.Data.Contains("Correcting container") || e.Data.Contains("Post-process")) {
-                                statusMessage = "🔄 오디오 변환 중...";
-                                currentPercent = 98;
-                                statusStyle = ProgressBarStyle.Marquee;
-                                phase = DownloadPhase.Processing;
-                            }
-                            // 4. 임시 파일 정리
-                            else if (e.Data.Contains("Deleting original file")) {
-                                statusMessage = "🗑️ 임시 파일 정리 중...";
-                                currentPercent = 99;
-                                statusStyle = ProgressBarStyle.Marquee;
-                                phase = DownloadPhase.Finishing;
-                            }
-                            // 5. 완료
-                            else if (e.Data.Contains("has already been downloaded")) {
-                                statusMessage = "✅ 이미 다운로드된 파일";
-                                currentPercent = 100;
-                                statusStyle = ProgressBarStyle.Continuous;
-                                phase = DownloadPhase.Completed;
-                            }
-
-                            if (!string.IsNullOrEmpty(statusMessage) && !isClosing) {
-                                DateTime now = DateTime.Now;
-                                // 100% 완료이거나 마지막 UI 업데이트 후 200ms 초과 시만 갱신 (쓰로틀링)
-                                bool isFinalState = currentPercent.HasValue && currentPercent.Value >= 100;
-                                if (isFinalState || statusStyle == ProgressBarStyle.Marquee || (now - lastUiReportTime).TotalMilliseconds >= 200) {
-                                    lastUiReportTime = now;
-                                    Invoke(new Action(() => {
-                                        if (progressBarIndex >= 0 && progressBarIndex < dynamicProgressBars.Count) {
-                                            // 동적 프로그레스바 모드: 개별 프로그레스바만 갱신
-                                            UpdateDynamicProgressBar(progressBarIndex, currentPercent ?? 0,
-                                                $"{GetPhaseIndicator(phase)}\n{displayTitle} · {statusMessage}", statusStyle);
-                                        } else {
-                                            // 단일 다운로드 모드: 메인 상단 프로그레스바 갱신
-                                            if (statusStyle == ProgressBarStyle.Marquee) {
-                                                progressBar1.Style = ProgressBarStyle.Marquee;
-                                                progressBar1.MarqueeAnimationSpeed = 10;
-                                            } else {
-                                                progressBar1.Style = ProgressBarStyle.Continuous;
-                                                if (currentPercent.HasValue) {
-                                                    progressBar1.Value = Math.Min(currentPercent.Value, 100);
-                                                }
-                                            }
-                                            label8.Text = $"{GetPhaseIndicator(phase)}\n[{currentFile}/{totalFiles}] {statusMessage} · {displayTitle}";
-                                        }
-                                    }));
-                                }
-                            }
-                        } catch (ObjectDisposedException) {
-                        } catch (InvalidOperationException) {
-                        } catch (Exception ex) {
-                            Console.WriteLine($"진행 상황 표시 오류: {ex.Message}");
-                        }
-                    }
-                };
-
-                process.ErrorDataReceived += (sender, e) => {
-                    if (!string.IsNullOrEmpty(e.Data)) {
-                        error.AppendLine(e.Data);
-                        Console.WriteLine($"[yt-dlp ERROR] {e.Data}");
-
-                        if (isMerging && TryGetFfmpegProgressPercent(e.Data, videoInfo.VideoLength, out int mergePercent) &&
-                            mergePercent != lastMergePercent) {
-                            lastMergePercent = mergePercent;
-                            ReportMergeProgress(progressBarIndex, currentFile, totalFiles, displayTitle: videoInfo.Title, mergePercent);
-                        }
-                    }
-                };
-
-                process.Start();
-                processTracker.RegisterProcess(process);
-
-                process.BeginOutputReadLine();
-                process.BeginErrorReadLine();
-
-                bool isCancelled = false;
-                await Task.Run(() => {
-                    while (!process.WaitForExit(300)) {
-                        if (cancellationToken.IsCancellationRequested) {
-                            try {
-                                if (!process.HasExited)
-                                    process.Kill();
-                            } catch { }
-                            isCancelled = true;
-                            break;
-                        }
-                    }
-
-                    if (!isCancelled) {
-                        process.WaitForExit();
-                    }
-                });
-
-                if (isCancelled || cancellationToken.IsCancellationRequested) {
-                    throw new OperationCanceledException(cancellationToken);
+            var request = YtDlpDownloadCommandFactory.Create(videoInfo, outputPath, GetVideoEncoder(),
+                Settings.Default.AudioBitrate, Settings.Default.AllowQualityFallback);
+            var progress = new Progress<DownloadProgress>(value => {
+                if (isClosing || IsDisposed) return;
+                ProgressBarStyle style = value.Percent.HasValue ? ProgressBarStyle.Continuous : ProgressBarStyle.Marquee;
+                string text = videoInfo.Title + " · " + value.Message;
+                var row = dataGridView1.Rows.Cast<DataGridViewRow>().FirstOrDefault(item => item.Cells[0].Value == videoInfo);
+                if (row != null) {
+                    row.Cells["DownloadState"].Value = value.Message;
+                    row.Cells["DownloadState"].ToolTipText = value.Message;
+                    row.Cells["DownloadOptions"].Value = DescribeOptions(videoInfo);
                 }
-
-                if (process.ExitCode != 0) {
-                    string errorMsg = error.ToString();
-                    if (errorMsg.Contains("Video unavailable")) {
-                        throw new Exception("영상을 사용할 수 없습니다.");
-                    } else if (errorMsg.Contains("Private video")) {
-                        throw new Exception("비공개 영상입니다.");
-                    } else {
-                        throw new Exception($"yt-dlp 다운로드 실패 (Exit Code: {process.ExitCode})\n{errorMsg}");
-                    }
+                if (progressBarIndex >= 0 && dynamicProgressBars.Count > 0)
+                    UpdateDynamicProgressBar(progressBarIndex, value.Percent ?? 0, text, style);
+                else {
+                    progressBar1.Style = style;
+                    if (value.Percent.HasValue) progressBar1.Value = value.Percent.Value;
+                    label8.Text = $"[{currentFile}/{totalFiles}] {text}";
                 }
-
-                string directory = Path.GetDirectoryName(outputPath);
-                string fileNameWithoutExt = Path.GetFileNameWithoutExtension(outputPath);
-
-                List<string> possibleFiles = new List<string> {
-            outputPath, // 원래 지정한 파일명
-            Path.Combine(directory, $"{fileNameWithoutExt}.{desiredExtension}"),
-        };
-
-                if (!videoInfo.TypeSave.IsTypeVideo) {
-                    possibleFiles.Add(Path.Combine(directory, $"{fileNameWithoutExt}.m4a"));
-                    possibleFiles.Add(Path.Combine(directory, $"{fileNameWithoutExt}.webm"));
-                    possibleFiles.Add(Path.Combine(directory, $"{fileNameWithoutExt}.opus"));
-                }
-
-                possibleFiles.Add(Path.Combine(directory, $"{fileNameWithoutExt}.webm"));
-                possibleFiles.Add(Path.Combine(directory, $"{fileNameWithoutExt}.mkv"));
-
-                foreach (string possibleFile in possibleFiles.Distinct()) {
-                    if (File.Exists(possibleFile)) {
-                        FileInfo fileInfo = new FileInfo(possibleFile);
-                        if (fileInfo.Length > 0) {
-                            Console.WriteLine($"✅ 다운로드 성공: {possibleFile} (크기: {fileInfo.Length:N0} bytes)");
-
-                            if (Path.GetExtension(possibleFile).TrimStart('.') != desiredExtension && videoInfo.TypeSave.IsTypeVideo) {
-                                Console.WriteLine($"⚠️ 확장자 불일치: 요청={desiredExtension}, 실제={Path.GetExtension(possibleFile)}");
-                            }
-
-                            return true;
-                        }
-                    }
-                }
-
-                Console.WriteLine($"❌ 다운로드 실패: 출력 파일을 찾을 수 없습니다.");
-                Console.WriteLine($"   예상 경로: {outputPath}");
-                Console.WriteLine($"   검색한 경로들:");
-                foreach (var file in possibleFiles.Distinct()) {
-                    Console.WriteLine($"     - {file}");
-                }
-                return false;
-
-            } catch (OperationCanceledException) {
-                try {
-                    if (process != null && !process.HasExited) {
-                        process.Kill();
-                    }
-                } catch { }
-                throw;
-            } finally {
-                processTracker.UnregisterProcess(process);
-                process?.Dispose();
-            }
+            });
+            await new DownloadService(Tol.AppdataPath).DownloadAsync(request, progress, cancellationToken);
+            return true;
         }
 
         void ToggleControls(bool isEnabled) {
@@ -1477,14 +1234,6 @@ namespace GMTFV.Start {
 
             try {
                 ToggleControls(false);
-
-                await GitHubUpdater.CheckAndUpdateAsync(
-                    "tharu8813",
-                    "Give-me-the-f-cking-video",
-                    new Version(Application.ProductVersion),
-                    progressBar1,
-                    label8
-                );
 
                 // FFmpeg 다운로드
                 label8.Text = "(최초 실행시 시도) FFmpeg 준비 중...";
@@ -1512,17 +1261,21 @@ namespace GMTFV.Start {
 
                 await YtDlpTool.EnsureYtDlpAsync(baseDir, ytdlpProgress);
 
+                try { await DenoTool.EnsureAsync(baseDir, lifetime.Token); }
+                catch (OperationCanceledException) when (lifetime.IsCancellationRequested) { return; }
+                catch (Exception ex) { new DiagnosticLog().Write("deno-setup", ex.Message); }
                 label8.Text = "준비 완료!";
                 progressBar1.Value = 0;
 
                 // 하단 도구(yt-dlp, FFmpeg) 버전 정보 표시
                 await DisplayToolVersionsAsync();
+                if (!isClosing) _ = GitHubUpdater.CheckAndUpdateAsync("tharu8813", "Give-me-the-f-cking-video",
+                    new Version(Application.ProductVersion), progressBar1, label8, () => !isDownloading && !isClosing);
             } catch (OperationCanceledException) {
-                Console.WriteLine("초기화가 사용자에 의해 취소되었습니다.");
-                Close();
+                label8.Text = "도구 준비가 취소되었습니다. 설치 후 앱을 다시 실행해주세요.";
             } catch (Exception ex) {
-                Tol.ShowError($"초기화 실패:\n{ex.Message}");
-                Close();
+                label8.Text = "도구 준비 실패 · 도구 폴더와 네트워크 연결을 확인해주세요.";
+                new DiagnosticLog().Write("startup", ex.Message);
             } finally {
                 try {
                     progressBar1.Style = ProgressBarStyle.Blocks;
@@ -1535,75 +1288,16 @@ namespace GMTFV.Start {
         /// 현재 사용 중인 yt-dlp 및 FFmpeg 버전을 비동기로 확인하여 하단 라벨에 표시합니다.
         /// </summary>
         private async Task DisplayToolVersionsAsync() {
-            string baseDir = Tol.AppdataPath;
-            string ytdlpPath = Path.Combine(baseDir, "yt-dlp.exe");
-            string ffmpegPath = Path.Combine(baseDir, "ffmpeg.exe");
+            var runner = new ProcessRunner();
+            string directory = Tol.AppdataPath;
+            string yt = await ToolDiagnostics.VersionAsync(Path.Combine(directory, "yt-dlp.exe"), runner, lifetime.Token);
+            string ff = await ToolDiagnostics.VersionAsync(Path.Combine(directory, "ffmpeg.exe"), runner, lifetime.Token);
+            string deno = ToolDiagnostics.ResolveDeno(directory);
+            string js = deno == null ? "미설치" : await ToolDiagnostics.VersionAsync(deno, runner, lifetime.Token);
+            if (!isClosing) {
+                lblToolVersions.Text = $"yt-dlp: {yt}  |  FFmpeg: {Regex.Match(ff, @"version\s+(\S+)").Groups[1].Value}  |  Deno: {js.Split('\n')[0]}";
 
-            string ytdlpVersion = "확인 중...";
-            string ffmpegVersion = "확인 중...";
-
-            // 1. yt-dlp 버전 확인
-            if (File.Exists(ytdlpPath)) {
-                try {
-                    string verOutput = await YtDlpTool.RunYtDlpCommandAsync(ytdlpPath, "--version", timeout: 10);
-                    if (!string.IsNullOrWhiteSpace(verOutput)) {
-                        ytdlpVersion = verOutput.Trim().Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)[0];
-                    }
-                } catch (Exception ex) {
-                    Console.WriteLine($"yt-dlp 버전 확인 실패: {ex.Message}");
-                    ytdlpVersion = "설치됨";
-                }
-            } else {
-                ytdlpVersion = "미설치";
             }
-
-            // 2. FFmpeg 버전 확인
-            if (File.Exists(ffmpegPath)) {
-                try {
-                    await Task.Run(() => {
-                        var startInfo = new ProcessStartInfo {
-                            FileName = ffmpegPath,
-                            Arguments = "-version",
-                            RedirectStandardOutput = true,
-                            RedirectStandardError = true,
-                            UseShellExecute = false,
-                            CreateNoWindow = true,
-                            StandardOutputEncoding = Encoding.UTF8
-                        };
-
-                        using (var p = new Process { StartInfo = startInfo }) {
-                            var output = new StringBuilder();
-                            p.OutputDataReceived += (_, e) => {
-                                if (!string.IsNullOrEmpty(e.Data)) output.AppendLine(e.Data);
-                            };
-                            p.Start();
-                            p.BeginOutputReadLine();
-                            p.WaitForExit(3000);
-
-                            string firstLine = output.ToString().Trim().Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries).FirstOrDefault();
-                            if (!string.IsNullOrWhiteSpace(firstLine)) {
-                                var match = Regex.Match(firstLine, @"ffmpeg\s+version\s+([^\s]+)");
-                                if (match.Success) {
-                                    ffmpegVersion = match.Groups[1].Value;
-                                } else {
-                                    ffmpegVersion = firstLine;
-                                }
-                            }
-                        }
-                    });
-                } catch (Exception ex) {
-                    Console.WriteLine($"FFmpeg 버전 확인 실패: {ex.Message}");
-                    ffmpegVersion = "설치됨";
-                }
-            } else {
-                ffmpegVersion = "미설치";
-            }
-
-            try {
-                Invoke(new Action(() => {
-                    lblToolVersions.Text = $"yt-dlp: {ytdlpVersion}  |  FFmpeg: {ffmpegVersion}";
-                }));
-            } catch { }
         }
 
         private void Button_MouseEnter(object sender, EventArgs e) {
@@ -1908,19 +1602,7 @@ namespace GMTFV.Start {
                         return AllList.LastOrDefault();
                     }
                 },
-                (addedVideo, config) => {
-                    lock (allListLock) {
-                        if (addedVideo.TypeSave == null) addedVideo.TypeSave = new TypeSaveVideo();
-                        addedVideo.TypeSave.IsTypeVideo = config.IsTypeVideo;
-                        addedVideo.TypeSave.SubType = config.SubType;
-
-                        if (!string.IsNullOrEmpty(config.Quality) && addedVideo.VideoQualities != null) {
-                            foreach (var q in addedVideo.VideoQualities) {
-                                q.IsSelected = (q.Quality == config.Quality);
-                            }
-                        }
-                    }
-                }
+                (addedVideo, config) => PlaylistManager.ApplyConfiguration(addedVideo, config)
             );
         }
 

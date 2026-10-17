@@ -7,6 +7,19 @@ using GMTFV.tools;
 namespace GMTFV.services {
     /// <summary>다운로드한 파일이 배포처가 제공한 SHA-256 값과 일치하는지 검증합니다.</summary>
     internal static class FileIntegrityVerifier {
+        public static void InstallVerifiedFile(string source, string destination) {
+            string staging = destination + "." + Guid.NewGuid().ToString("N") + ".tmp";
+            try {
+                File.Copy(source, staging);
+                if (File.Exists(destination)) File.Replace(staging, destination, null);
+                else File.Move(staging, destination);
+            } finally {
+                try { if (File.Exists(staging)) File.Delete(staging); }
+                catch (IOException) { }
+                catch (UnauthorizedAccessException) { }
+            }
+        }
+
         public static async Task VerifyRemoteSha256Async(string filePath, Uri checksumUri, string expectedFileName = null) {
             if (checksumUri == null) throw new ArgumentNullException(nameof(checksumUri));
             string checksumDocument = await Tol.SharedHttpClient.GetStringAsync(checksumUri);

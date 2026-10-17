@@ -1,4 +1,6 @@
 <Solution>
   <Project Path="GMTFV.csproj" Id="8b7adc54-baf1-4f91-abae-6dc71ef71536" />
-  <Project Path="src/GMTFV.Wpf/GMTFV.Wpf.csproj" />
+  <Project Path="src/GMTFV.Core/GMTFV.Core.csproj" Id="63c7bfd3-db57-4566-ab10-f193cb482ad8" />
+  <Project Path="src/GMTFV.DownloadEngine/GMTFV.DownloadEngine.csproj" Id="38b36788-05f3-427e-999a-68273170a5bb" />
+  <Project Path="tests/GMTFV.Tests/GMTFV.Tests.csproj" Id="3b963fdb-28de-4fc1-81ee-973f2e1647cb" />
 </Solution>

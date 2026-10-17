@@ -1,15 +1,14 @@
 using System;
-using System.Diagnostics;
+using GMTFV.DownloadEngine;
 using System.IO;
 using System.Net.Http;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using GMTFV.services;
 using static GMTFV.tools.Tol;
 
 namespace GMTFV.tools {
-    internal class YtDlpTool {
+    internal static class YtDlpTool {
 
         // ─────────────────────────────────────────────────
         //  정적 필드
@@ -56,196 +55,6 @@ namespace GMTFV.tools {
             }
         }
 
-        /// <summary>
-        /// yt-dlp 가 설치되어 있는지 확인합니다.
-        /// </summary>
-        public static bool IsYtDlpInstalled(string baseDir) {
-            if (string.IsNullOrWhiteSpace(baseDir))
-                return false;
-
-            try {
-                return File.Exists(Path.Combine(baseDir, "yt-dlp.exe"));
-            } catch (Exception ex) {
-                Console.WriteLine($"IsYtDlpInstalled 오류: {ex.Message}");
-                return false;
-            }
-        }
-
-        /// <summary>
-        /// yt-dlp 를 강제로 재다운로드합니다.
-        /// 임시 파일에 다운로드한 뒤 성공하면 기존 파일을 교체합니다.
-        /// 실패해도 기존 실행 파일은 유지됩니다.
-        /// </summary>
-        public static async Task ForceUpdateYtDlpAsync(
-            string baseDir,
-            IProgress<FFmpegProgress> progress = null) {
-
-            if (string.IsNullOrWhiteSpace(baseDir))
-                throw new ArgumentNullException(nameof(baseDir));
-
-            string ytdlpPath = Path.Combine(baseDir, "yt-dlp.exe");
-            string tempPath  = ytdlpPath + ".tmp";
-
-            ReportProgress(progress, 0, "yt-dlp 강제 업데이트 시작...");
-
-            try {
-                // 임시 파일로 다운로드
-                await DownloadToFileAsync(tempPath, progress);
-
-                // 다운로드 성공 → 기존 파일 교체 (.NET Framework 호환: 삭제 후 이동)
-                if (File.Exists(ytdlpPath))
-                    File.Delete(ytdlpPath);
-                File.Move(tempPath, ytdlpPath);
-
-                ReportProgress(progress, 100, "yt-dlp 강제 업데이트 완료!");
-                Console.WriteLine($"yt-dlp 강제 업데이트 완료: {ytdlpPath}");
-            } catch (Exception ex) {
-                // 롤백: 임시 파일만 정리 (기존 exe 는 건드리지 않음)
-                DeleteFileIfExists(tempPath);
-                throw new Exception($"yt-dlp 강제 업데이트 실패: {ex.Message}", ex);
-            }
-        }
-
-        /// <summary>
-        /// yt-dlp 명령어를 비동기로 실행하고 stdout 을 반환합니다.
-        /// ExitCode != 0 이면 stderr 를 포함한 예외를 던집니다.
-        /// </summary>
-        public static async Task<string> RunYtDlpCommandAsync(
-            string ytdlpPath,
-            string arguments,
-            int timeout = 30,
-            CancellationToken cancellationToken = default) {
-
-            if (string.IsNullOrWhiteSpace(ytdlpPath))
-                throw new ArgumentNullException(nameof(ytdlpPath));
-            if (!File.Exists(ytdlpPath))
-                throw new FileNotFoundException("yt-dlp.exe를 찾을 수 없습니다.", ytdlpPath);
-
-            var startInfo = new ProcessStartInfo {
-                FileName               = ytdlpPath,
-                Arguments              = arguments ?? string.Empty,
-                RedirectStandardOutput = true,
-                RedirectStandardError  = true,
-                UseShellExecute        = false,
-                CreateNoWindow         = true,
-                StandardOutputEncoding = Encoding.UTF8,
-                StandardErrorEncoding  = Encoding.UTF8,
-            };
-
-            using (var process = new Process { StartInfo = startInfo }) {
-                var output = new StringBuilder();
-                var error  = new StringBuilder();
-
-                process.OutputDataReceived += (_, e) => {
-                    if (!string.IsNullOrEmpty(e.Data))
-                        output.AppendLine(e.Data);
-                };
-                process.ErrorDataReceived += (_, e) => {
-                    if (!string.IsNullOrEmpty(e.Data))
-                        error.AppendLine(e.Data);
-                };
-
-                try {
-                    process.Start();
-                    process.BeginOutputReadLine();
-                    process.BeginErrorReadLine();
-
-                    bool isCancelled = false;
-                    using (var linkedCts = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken)) {
-                        linkedCts.CancelAfter(TimeSpan.FromSeconds(timeout));
-
-                        await Task.Run(() => {
-                            while (!process.WaitForExit(500)) {
-                                if (linkedCts.Token.IsCancellationRequested) {
-                                    try {
-                                        if (!process.HasExited)
-                                            process.Kill();
-                                    } catch { /* 이미 종료되었거나 실패한 경우 */ }
-                                    isCancelled = true;
-                                    break;
-                                }
-                            }
-
-                            if (!isCancelled) {
-                                // 비동기 출력 버퍼가 완전히 비워질 때까지 대기
-                                process.WaitForExit();
-                            }
-                        });
-
-                        if (isCancelled || linkedCts.Token.IsCancellationRequested) {
-                            if (cancellationToken.IsCancellationRequested) {
-                                throw new OperationCanceledException(cancellationToken);
-                            }
-                            throw new TimeoutException($"yt-dlp 명령 실행 시간 초과 ({timeout}초)");
-                        }
-                    }
-
-                    string errorText = error.ToString();
-                    if (!string.IsNullOrWhiteSpace(errorText))
-                        Console.WriteLine($"yt-dlp stderr: {errorText}");
-
-                    // ExitCode 검사
-                    if (process.ExitCode != 0) {
-                        throw new Exception(
-                            $"yt-dlp 비정상 종료 (ExitCode={process.ExitCode}). " +
-                            $"stderr: {errorText.Trim()}");
-                    }
-
-                    return output.ToString();
-                } catch (OperationCanceledException) {
-                    throw;
-                } catch (Exception ex) when (!(ex is OperationCanceledException)) {
-                    throw new Exception($"yt-dlp 명령 실행 실패: {ex.Message}", ex);
-                }
-            }
-        }
-
-        /// <summary>
-        /// yt-dlp 로 비디오 정보(JSON)를 가져옵니다.
-        /// </summary>
-        public static async Task<string> GetVideoInfoJsonAsync(
-            string ytdlpPath,
-            string url,
-            CancellationToken cancellationToken = default) {
-
-            if (string.IsNullOrWhiteSpace(ytdlpPath))
-                throw new ArgumentNullException(nameof(ytdlpPath));
-            if (string.IsNullOrWhiteSpace(url))
-                throw new ArgumentNullException(nameof(url));
-            if (!File.Exists(ytdlpPath))
-                throw new FileNotFoundException("yt-dlp.exe를 찾을 수 없습니다.", ytdlpPath);
-
-            string arguments = $"--dump-json --no-warnings --no-playlist \"{url}\"";
-
-            try {
-                return await RunYtDlpCommandAsync(ytdlpPath, arguments, timeout: 30, cancellationToken);
-            } catch (Exception ex) {
-                throw new Exception($"비디오 정보 가져오기 실패: {ex.Message}", ex);
-            }
-        }
-
-        /// <summary>
-        /// 현재 실행 중인 yt-dlp 프로세스를 모두 강제 종료합니다.
-        /// </summary>
-        public static void KillAllYtDlpProcesses() {
-            try {
-                foreach (Process process in Process.GetProcessesByName("yt-dlp")) {
-                    try {
-                        if (!process.HasExited) {
-                            process.Kill();
-                            process.WaitForExit(3000);
-                        }
-                    } catch (Exception ex) {
-                        Console.WriteLine($"yt-dlp 프로세스 종료 오류: {ex.Message}");
-                    } finally {
-                        process?.Dispose();
-                    }
-                }
-            } catch (Exception ex) {
-                Console.WriteLine($"KillAllYtDlpProcesses 오류: {ex.Message}");
-            }
-        }
-
         // ─────────────────────────────────────────────────
         //  Private 핵심 로직
         // ─────────────────────────────────────────────────
@@ -261,26 +70,8 @@ namespace GMTFV.tools {
             string tempPath  = ytdlpPath + ".tmp";
 
             if (File.Exists(ytdlpPath)) {
-                // ── 24시간 내 이미 업데이트를 확인한 경우 건너뛰기 ──
-                DateTime lastCheck = GMTFV.Properties.Settings.Default.LastYtDlpUpdateCheck;
-                if ((DateTime.Now - lastCheck).TotalHours < 24) {
-                    ReportProgress(progress, 100, "yt-dlp 준비 완료 (최근 버전 확인됨)");
-                    return;
-                }
-
-                // ── 24시간이 경과한 경우 업데이트 시도 ──
-                ReportProgress(progress, 0, "yt-dlp 최신 버전 확인 중...");
-
-                bool updated = await UpdateYtDlpIfNeededAsync(ytdlpPath, tempPath, progress);
-
-                // 확인 시각 저장
-                GMTFV.Properties.Settings.Default.LastYtDlpUpdateCheck = DateTime.Now;
-                GMTFV.Properties.Settings.Default.Save();
-
-                ReportProgress(progress, 100, updated
-                    ? "yt-dlp가 최신 버전으로 업데이트되었습니다."
-                    : "yt-dlp는 이미 최신 버전입니다.");
-
+                ReportProgress(progress, 100, "yt-dlp 준비 완료");
+                _ = RefreshInstalledAsync(baseDir);
                 return;
             }
 
@@ -292,10 +83,8 @@ namespace GMTFV.tools {
                 // 임시 파일로 다운로드
                 await DownloadToFileAsync(tempPath, progress);
 
-                // 다운로드 성공 → 정식 위치로 이동 (.NET Framework 호환: 삭제 후 이동)
-                if (File.Exists(ytdlpPath))
-                    File.Delete(ytdlpPath);
-                File.Move(tempPath, ytdlpPath);
+                // 다운로드 성공 → 정식 위치로 이동 (검증 후 원자적 교체)
+                InstallVerifiedFile(tempPath, ytdlpPath);
 
                 ReportProgress(progress, 100, "yt-dlp 다운로드 완료!");
                 Console.WriteLine($"yt-dlp가 성공적으로 설치되었습니다: {ytdlpPath}");
@@ -307,8 +96,20 @@ namespace GMTFV.tools {
             }
         }
 
+        private static async Task RefreshInstalledAsync(string baseDir) {
+            await _ensureSemaphore.WaitAsync();
+            try {
+                if ((DateTime.Now - GMTFV.Properties.Settings.Default.LastYtDlpUpdateCheck).TotalHours < 24) return;
+                string path = Path.Combine(baseDir, "yt-dlp.exe");
+                await UpdateYtDlpIfNeededAsync(path, path + ".tmp", null);
+                GMTFV.Properties.Settings.Default.LastYtDlpUpdateCheck = DateTime.Now;
+                GMTFV.Properties.Settings.Default.Save();
+            } catch (Exception ex) { new DiagnosticLog().Write("yt-dlp-update", ex.Message); }
+            finally { _ensureSemaphore.Release(); }
+        }
+
         /// <summary>
-        /// <c>yt-dlp -U</c> 를 실행하여 업데이트를 시도합니다.
+        /// 릴리스 버전을 비교하고 체크섬을 검증한 실행 파일로 교체합니다.
         /// </summary>
         /// <returns>업데이트가 실제로 수행되었으면 <c>true</c>, 최신 버전이거나 실패하면 <c>false</c>.</returns>
         private static async Task<bool> UpdateYtDlpIfNeededAsync(
@@ -320,14 +121,21 @@ namespace GMTFV.tools {
                 return false;
 
             try {
+                string installed = await ToolDiagnostics.VersionAsync(ytdlpPath, new ProcessRunner(), CancellationToken.None);
+                using (var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20)))
+                using (var release = await _httpClient.GetAsync("https://api.github.com/repos/yt-dlp/yt-dlp/releases/latest", timeout.Token)) {
+                    release.EnsureSuccessStatusCode();
+                    string tag = Newtonsoft.Json.Linq.JObject.Parse(await release.Content.ReadAsStringAsync())["tag_name"]?.ToString().TrimStart('v');
+                    if (string.Equals(tag, installed, StringComparison.OrdinalIgnoreCase)) return false;
+                }
                 ReportProgress(progress, 10, "yt-dlp 업데이트 확인 및 검증 중...");
                 await DownloadToFileAsync(tempPath, progress);
 
                 // 검증된 파일만 기존 실행 파일을 교체합니다.
-                File.Delete(ytdlpPath);
-                File.Move(tempPath, ytdlpPath);
+                InstallVerifiedFile(tempPath, ytdlpPath);
                 return true;
             } catch (Exception ex) {
+                DeleteFileIfExists(tempPath);
                 // 업데이트 실패 → 기존 exe 그대로 사용
                 Console.WriteLine($"yt-dlp 업데이트 실패 (기존 버전 유지): {ex.Message}");
 
@@ -345,9 +153,9 @@ namespace GMTFV.tools {
             string destPath,
             IProgress<FFmpegProgress> progress) {
 
-            var response = await _httpClient.GetAsync(
+            using (var response = await _httpClient.GetAsync(
                 DownloadUrl,
-                HttpCompletionOption.ResponseHeadersRead);
+                HttpCompletionOption.ResponseHeadersRead)) {
 
             response.EnsureSuccessStatusCode();
 
@@ -384,6 +192,12 @@ namespace GMTFV.tools {
                 destPath,
                 new Uri(ChecksumUrl),
                 "yt-dlp.exe");
+            }
+        }
+
+        private static void InstallVerifiedFile(string source, string destination) {
+            FileIntegrityVerifier.InstallVerifiedFile(source, destination);
+            DeleteFileIfExists(source);
         }
 
         // ─────────────────────────────────────────────────
@@ -395,7 +209,7 @@ namespace GMTFV.tools {
         /// </summary>
         private static HttpClient CreateHttpClient() {
             var client = new HttpClient {
-                Timeout = TimeSpan.FromMinutes(10)
+                Timeout = TimeSpan.FromMinutes(2)
             };
             client.DefaultRequestHeaders.Add(
                 "User-Agent",

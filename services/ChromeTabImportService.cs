@@ -33,7 +33,8 @@ namespace GMTFV.services {
                     TcpClient client = await listener.AcceptTcpClientAsync();
                     _ = HandleClientAsync(client, cancellationToken);
                 } catch (ObjectDisposedException) { break; }
-                catch (SocketException) when (!cancellationToken.IsCancellationRequested) { }
+                catch (SocketException) when (cancellationToken.IsCancellationRequested) { break; }
+                catch (SocketException) { break; }
             }
         }
 
@@ -55,7 +56,8 @@ namespace GMTFV.services {
                     byte[] response = Encoding.UTF8.GetBytes(
                         "HTTP/1.1 " + (accepted ? "200 OK" : "404 Not Found") + "\r\nContent-Type: application/json; charset=utf-8\r\nAccess-Control-Allow-Origin: " + origin + "\r\nContent-Length: " + Encoding.UTF8.GetByteCount(responseBody) + "\r\n\r\n" + responseBody);
                     await stream.WriteAsync(response, 0, response.Length, cancellationToken);
-                } catch (Exception) when (!cancellationToken.IsCancellationRequested) { }
+                } catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { }
+                catch (Exception) when (!cancellationToken.IsCancellationRequested) { }
             }
         }
 
@@ -84,11 +86,14 @@ namespace GMTFV.services {
             }
         }
 
-        private static List<string> ParseYouTubeUrls(string body) {
+        internal static List<string> ParseYouTubeUrls(string body) {
             List<string> urls = new List<string>();
             try {
                 foreach (string value in JArray.Parse(body).Values<string>()) {
-                    if (!string.IsNullOrWhiteSpace(value) && tools.Tol.IsYouTubeUrl(value) && !urls.Contains(value)) urls.Add(value);
+                    if (!string.IsNullOrWhiteSpace(value) && tools.Tol.IsYouTubeUrl(value)) {
+                        string normalized = GMTFV.Core.YouTubeUrl.Normalize(value);
+                        if (!urls.Contains(normalized)) urls.Add(normalized);
+                    }
                 }
             } catch { }
             return urls;
