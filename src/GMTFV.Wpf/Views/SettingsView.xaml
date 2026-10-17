@@ -1,0 +1,48 @@
+<UserControl x:Class="GMTFV.Wpf.Views.SettingsView" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:s="clr-namespace:GMTFV.Wpf.Services" s:Motion.Enter="True">
+ <DockPanel>
+  <StackPanel DockPanel.Dock="Bottom" Margin="0,16,0,0">
+   <TextBlock Text="변경값은 현재 작업에 적용됩니다. 저장하면 다음 실행에도 유지됩니다." Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,0,0,12" />
+   <Button Content="설정 저장" Style="{StaticResource PrimaryButton}" Command="{Binding SaveSettingsCommand}" IsEnabled="{Binding CanEditSettings}" />
+  </StackPanel>
+  <TabControl IsEnabled="{Binding CanEditSettings}" AutomationProperties.Name="설정 카테고리">
+   <TabItem Header="일반"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
+    <TextBlock Text="사용 환경" Style="{StaticResource SectionTitle}" Margin="0,0,0,14" />
+    <Border Style="{StaticResource SettingsCard}"><StackPanel><CheckBox Content="모션 줄이기" IsChecked="{Binding ReduceMotion}" /><TextBlock Text="창 전환과 스크롤 움직임을 줄입니다. Windows 애니메이션 설정도 반영합니다." Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,8,0,0" /></StackPanel></Border>
+   </StackPanel></ScrollViewer></TabItem>
+   <TabItem Header="다운로드"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
+    <TextBlock Text="저장 및 실행" Style="{StaticResource SectionTitle}" Margin="0,0,0,14" />
+    <Border Style="{StaticResource SettingsCard}"><StackPanel>
+     <TextBlock Text="저장 폴더" Style="{StaticResource Label}" /><TextBox Text="{Binding Settings.OutputFolder, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="저장 폴더" /><Button Content="폴더 선택…" Command="{Binding ChooseOutputCommand}" Margin="0,8,0,0" />
+     <TextBlock Text="동시 다운로드" Style="{StaticResource Label}" /><ComboBox ItemsSource="{Binding ConcurrencyChoices}" SelectedItem="{Binding Settings.Concurrency}" AutomationProperties.Name="동시 다운로드 수" />
+     <TextBlock Text="파일명 템플릿" Style="{StaticResource Label}" /><TextBox Text="{Binding Settings.FileNameTemplate, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="파일명 템플릿" /><TextBlock Text="%title%  %author%  %id%  %date%  %num3%" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,8,0,0" />
+    </StackPanel></Border>
+   </StackPanel></ScrollViewer></TabItem>
+   <TabItem Header="형식"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
+    <TextBlock Text="기본 형식 및 화질" Style="{StaticResource SectionTitle}" Margin="0,0,0,14" />
+    <Border Style="{StaticResource SettingsCard}"><StackPanel>
+     <CheckBox Content="영상 다운로드 (끄면 오디오만 저장)" IsChecked="{Binding Settings.IsVideo}" Command="{Binding ModeChangedCommand}" />
+     <TextBlock Text="저장 형식" Style="{StaticResource Label}" /><ComboBox ItemsSource="{Binding Formats}" SelectedItem="{Binding SelectedFormat}" AutomationProperties.Name="저장 형식" />
+     <TextBlock Text="최대 해상도 · 0 = 최고 화질" Style="{StaticResource Label}" /><ComboBox ItemsSource="{Binding Heights}" SelectedItem="{Binding Settings.Height}" IsEnabled="{Binding Settings.IsVideo}" AutomationProperties.Name="해상도" />
+     <CheckBox Content="화질이 없으면 더 낮은 화질 허용" IsChecked="{Binding Settings.AllowQualityFallback}" Margin="0,8,0,0" />
+     <TextBlock Text="각 영상의 설정에서 기본값 사용을 끄면 해당 영상만 따로 지정할 수 있습니다." Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,10,0,0" />
+    </StackPanel></Border>
+   </StackPanel></ScrollViewer></TabItem>
+   <TabItem Header="고급"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
+    <TextBlock Text="변환 옵션" Style="{StaticResource SectionTitle}" Margin="0,0,0,14" />
+    <Border Style="{StaticResource SettingsCard}"><StackPanel>
+     <TextBlock Text="오디오 비트레이트 (32~512 kbps)" Style="{StaticResource Label}" /><ComboBox ItemsSource="{Binding AudioBitrates}" SelectedItem="{Binding Settings.AudioBitrate}" AutomationProperties.Name="오디오 비트레이트" />
+     <TextBlock Text="AVI / FLV 변환 인코더" Style="{StaticResource Label}" /><ComboBox ItemsSource="{Binding Encoders}" SelectedItem="{Binding Settings.VideoEncoder}" AutomationProperties.Name="영상 인코더" />
+     <TextBlock Text="MP4 / MKV 등은 재인코딩 없이 병합·컨테이너 변경을 사용합니다." Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,10,0,0" />
+    </StackPanel></Border>
+   </StackPanel></ScrollViewer></TabItem>
+   <TabItem Header="도구"><ScrollViewer VerticalScrollBarVisibility="Auto"><StackPanel>
+    <TextBlock Text="도구 및 진단" Style="{StaticResource SectionTitle}" Margin="0,0,0,14" />
+    <Border Style="{StaticResource SettingsCard}"><StackPanel>
+     <TextBlock Text="yt-dlp / FFmpeg / Deno 폴더" Style="{StaticResource Label}" /><TextBox Text="{Binding Settings.ToolFolder, UpdateSourceTrigger=PropertyChanged}" AutomationProperties.Name="도구 폴더" /><Button Content="도구 폴더 선택…" Command="{Binding ChooseToolsCommand}" Margin="0,8,0,0" />
+     <TextBlock Text="기존 도구 폴더를 사용하거나 직접 경로를 지정하세요." Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,10,0,0" />
+    </StackPanel></Border>
+    <Button Content="도구 버전 / 상태 확인 →" Command="{Binding PanelCommand}" CommandParameter="Diagnostics" /><Button Content="진단 로그 폴더 열기" Command="{Binding OpenLogsCommand}" Margin="0,8,0,0" />
+   </StackPanel></ScrollViewer></TabItem>
+  </TabControl>
+ </DockPanel>
+</UserControl>

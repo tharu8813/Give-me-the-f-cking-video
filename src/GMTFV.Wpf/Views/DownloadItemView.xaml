@@ -1,0 +1,35 @@
+<UserControl x:Class="GMTFV.Wpf.Views.DownloadItemView" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:s="clr-namespace:GMTFV.Wpf.Services" xmlns:core="clr-namespace:GMTFV.Core;assembly=GMTFV.Core" s:Motion.Enter="True" s:Motion.Present="{Binding IsRemoving, Converter={StaticResource Inverse}}">
+  <Border x:Name="Row" Padding="{StaticResource RowPadding}" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource LineBrush}">
+    <Border.Style><Style TargetType="Border"><Setter Property="Background" Value="{DynamicResource PanelBrush}" /><Style.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter Property="Background" Value="{DynamicResource HoverBrush}" /></Trigger></Style.Triggers></Style></Border.Style>
+    <Grid>
+      <Grid.ColumnDefinitions><ColumnDefinition Width="120" /><ColumnDefinition Width="20" /><ColumnDefinition Width="*" /><ColumnDefinition Width="100" /><ColumnDefinition Width="174" /></Grid.ColumnDefinitions>
+      <Border Background="{DynamicResource InputBrush}" Height="70" VerticalAlignment="Top" CornerRadius="4" ClipToBounds="True">
+        <Grid><TextBlock Text="▶" FontSize="22" Foreground="{DynamicResource DisabledBrush}" HorizontalAlignment="Center" VerticalAlignment="Center" /><Image Source="{Binding Thumbnail, Converter={StaticResource Thumbnail}}" Stretch="UniformToFill" RenderOptions.BitmapScalingMode="LowQuality" ImageFailed="ThumbnailFailed" /><Border Style="{StaticResource Skeleton}" s:Motion.Present="{Binding IsMetadata}" /><Border Background="#D9101316" HorizontalAlignment="Right" VerticalAlignment="Bottom" Margin="4" Padding="5,2"><TextBlock Text="{Binding Duration}" FontFamily="{StaticResource MonoFont}" FontSize="10" /></Border></Grid>
+      </Border>
+      <Grid Grid.Column="2" Margin="0,0,18,0">
+        <Grid.RowDefinitions><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /><RowDefinition Height="Auto" /></Grid.RowDefinitions>
+        <TextBlock Text="{Binding Title}" FontSize="14" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" ToolTip="{Binding Title}" />
+        <Grid Grid.Row="1" Margin="0,6,0,10"><Grid.ColumnDefinitions><ColumnDefinition Width="*" /><ColumnDefinition Width="Auto" /></Grid.ColumnDefinitions><TextBlock Text="{Binding Channel}" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" Margin="0,0,12,0" /><TextBlock Grid.Column="1" Text="{Binding Selection}" Style="{StaticResource Caption}" MaxWidth="240" TextTrimming="CharacterEllipsis" ToolTip="{Binding Selection}" /></Grid>
+        <ProgressBar Grid.Row="2" s:Motion.Progress="{Binding Progress}" IsIndeterminate="{Binding IsIndeterminate}" AutomationProperties.Name="다운로드 진행률" />
+        <TextBlock Grid.Row="3" Text="{Binding Message}" Margin="0,6,0,0" FontSize="11" Foreground="{DynamicResource MutedBrush}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Message}" />
+      </Grid>
+      <StackPanel Grid.Column="3" VerticalAlignment="Center" Margin="0,0,12,0">
+        <TextBlock Text="{Binding StateText}" FontSize="12" FontWeight="SemiBold">
+          <TextBlock.Style><Style TargetType="TextBlock" BasedOn="{StaticResource {x:Type TextBlock}}"><Setter Property="Foreground" Value="{DynamicResource MutedBrush}" /><Style.Triggers>
+            <DataTrigger Binding="{Binding State}" Value="{x:Static core:DownloadState.Downloading}"><Setter Property="Foreground" Value="{DynamicResource ProgressBrush}" /></DataTrigger>
+            <DataTrigger Binding="{Binding State}" Value="{x:Static core:DownloadState.Completed}"><Setter Property="Foreground" Value="{DynamicResource SuccessBrush}" /></DataTrigger>
+            <DataTrigger Binding="{Binding State}" Value="{x:Static core:DownloadState.Failed}"><Setter Property="Foreground" Value="{DynamicResource ErrorBrush}" /></DataTrigger>
+            <DataTrigger Binding="{Binding State}" Value="{x:Static core:DownloadState.Retrying}"><Setter Property="Foreground" Value="{DynamicResource WarningBrush}" /></DataTrigger>
+          </Style.Triggers></Style></TextBlock.Style>
+        </TextBlock><TextBlock Text="{Binding ProgressText}" FontFamily="{StaticResource MonoFont}" Foreground="{DynamicResource MutedBrush}" Margin="0,7,0,0" />
+      </StackPanel>
+      <StackPanel Grid.Column="4" Orientation="Horizontal" VerticalAlignment="Center" HorizontalAlignment="Right">
+        <Button Content="⚙" ToolTip="영상별 옵션과 자막" AutomationProperties.Name="영상별 설정" Style="{StaticResource IconButton}" Command="{Binding DataContext.EditItemCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Margin="0,0,4,0" />
+        <Button Content="↻" ToolTip="다시 시도" AutomationProperties.Name="다시 시도" Style="{StaticResource IconButton}" Command="{Binding DataContext.RetryCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Visibility="{Binding CanRetry, Converter={StaticResource BoolVisibility}}" />
+        <Button Content="■" ToolTip="이 항목 취소" AutomationProperties.Name="이 항목 취소" Style="{StaticResource IconButton}" Command="{Binding DataContext.CancelCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Visibility="{Binding CanCancel, Converter={StaticResource BoolVisibility}}" />
+        <Button Content="!" ToolTip="실패 원인과 복구 방법" AutomationProperties.Name="실패 상세" Style="{StaticResource IconButton}" Foreground="{DynamicResource ErrorBrush}" Command="{Binding DataContext.FailureCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Visibility="{Binding HasError, Converter={StaticResource BoolVisibility}}" Margin="4,0,0,0" />
+        <Button Content="×" ToolTip="목록에서 제거 (파일은 유지)" AutomationProperties.Name="목록에서 제거" Style="{StaticResource IconButton}" Command="{Binding DataContext.RemoveCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" Margin="4,0,0,0" />
+      </StackPanel>
+    </Grid>
+  </Border>
+</UserControl>

@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType><TargetFramework>net10.0-windows</TargetFramework><UseWPF>true</UseWPF>
+    <ImplicitUsings>enable</ImplicitUsings><Nullable>enable</Nullable>
+    <AssemblyName>GMTFV.Wpf</AssemblyName><RootNamespace>GMTFV.Wpf</RootNamespace><Version>0.1.0</Version>
+    <Title>GMTFV</Title><Product>GMTFV</Product>
+    <ApplicationIcon>..\..\icon.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <Resource Include="..\..\icon.ico" Link="Assets\App.ico" />
+    <ProjectReference Include="..\GMTFV.Core\GMTFV.Core.csproj" />
+    <ProjectReference Include="..\GMTFV.DownloadEngine\GMTFV.DownloadEngine.csproj" />
+    <Content Include="..\..\LICENSE.txt" Link="LICENSE.txt" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="..\..\THIRD-PARTY-NOTICES.md" Link="THIRD-PARTY-NOTICES.md" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+</Project>

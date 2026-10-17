@@ -8,7 +8,8 @@ using GMTFV.Core;
 namespace GMTFV.DownloadEngine {
     public sealed class SubtitleService {
         private readonly YtDlpClient client;
-        public SubtitleService(string toolDirectory) { client = new YtDlpClient(toolDirectory); }
+        public SubtitleService(string toolDirectory) : this(toolDirectory, null) { }
+        public SubtitleService(string toolDirectory, DiagnosticLog log) { client = new YtDlpClient(toolDirectory, log: log); }
         public async Task<string> GetMetadataAsync(string url, CancellationToken token) {
             var result = await client.RunAsync(new[] { "--dump-single-json", "--skip-download", "--", YouTubeUrl.Normalize(url) }, TimeSpan.FromSeconds(60), token).ConfigureAwait(false);
             return result.Output;

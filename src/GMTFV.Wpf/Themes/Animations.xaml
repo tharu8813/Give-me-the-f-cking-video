@@ -1,0 +1,3 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml" xmlns:s="clr-namespace:GMTFV.Wpf.Services">
+  <Style x:Key="Skeleton" TargetType="Border"><Setter Property="Background" Value="{DynamicResource LineBrush}" /><Setter Property="CornerRadius" Value="4" /><Setter Property="Opacity" Value="0.6" /><Setter Property="s:Motion.Pulse" Value="True" /></Style>
+</ResourceDictionary>

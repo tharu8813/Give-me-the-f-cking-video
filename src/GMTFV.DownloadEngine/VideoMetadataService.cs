@@ -10,8 +10,11 @@ using Newtonsoft.Json.Linq;
 
 namespace GMTFV.DownloadEngine {
     public sealed class VideoMetadataService {
+        private readonly DiagnosticLog log;
+        public VideoMetadataService() { }
+        public VideoMetadataService(DiagnosticLog log) { this.log = log; }
         public async Task<VideoMetadata> GetAsync(string url, string toolDirectory, CancellationToken token) {
-            ProcessResult result = await new YtDlpClient(toolDirectory).RunAsync(new[] { "--dump-single-json", "--skip-download", "--", YouTubeUrl.Normalize(url) },
+            ProcessResult result = await new YtDlpClient(toolDirectory, log: log).RunAsync(new[] { "--dump-single-json", "--skip-download", "--", YouTubeUrl.Normalize(url) },
                 TimeSpan.FromSeconds(60), token).ConfigureAwait(false);
             return Parse(result.Output);
         }

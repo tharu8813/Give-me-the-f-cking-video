@@ -1,0 +1,39 @@
+<UserControl x:Class="GMTFV.Wpf.Views.ItemSettingsView" xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+ <DockPanel>
+  <Grid DockPanel.Dock="Top" Margin="0,0,0,18">
+   <TextBlock Text="영상별 설정" Style="{StaticResource SectionTitle}" VerticalAlignment="Center" />
+   <Button Content="×" Style="{StaticResource IconButton}" HorizontalAlignment="Right" Command="{Binding DataContext.CloseItemCommand, RelativeSource={RelativeSource AncestorType=Window}}" AutomationProperties.Name="영상 설정 닫기" />
+  </Grid>
+  <StackPanel DockPanel.Dock="Bottom" Margin="0,18,0,0">
+   <TextBlock Text="{Binding Status}" TextWrapping="Wrap" Style="{StaticResource Caption}" Margin="0,0,0,12" />
+   <Button Content="이 영상에 적용" Style="{StaticResource PrimaryButton}" Command="{Binding DataContext.SaveItemCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+  </StackPanel>
+  <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" Padding="0,0,12,0">
+   <StackPanel>
+    <TextBlock Text="{Binding Item.Title}" FontSize="18" FontWeight="SemiBold" TextWrapping="Wrap" />
+    <TextBlock Text="{Binding Item.Channel}" Style="{StaticResource Caption}" Margin="0,8,0,0" />
+    <TextBlock Text="{Binding UploadDate, StringFormat=업로드일 · {0}}" Style="{StaticResource Caption}" Margin="0,6,0,12" />
+    <TextBox Text="{Binding Item.Url, Mode=OneWay}" IsReadOnly="True" AutomationProperties.Name="영상 URL" />
+    <StackPanel Orientation="Horizontal" Margin="0,8,0,18">
+     <Button Content="주소 복사" Command="{Binding DataContext.CopyItemUrlCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+     <Button Content="YouTube에서 열기 ↗" Margin="8,0,0,0" Command="{Binding DataContext.OpenItemUrlCommand, RelativeSource={RelativeSource AncestorType=Window}}" />
+    </StackPanel>
+    <CheckBox Content="기본 설정 사용" IsChecked="{Binding UseDefaults}" />
+    <TextBlock Text="켜면 공통 설정의 영상/오디오·형식·화질을 따릅니다." Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,12" />
+    <Border Style="{StaticResource SettingsCard}" IsEnabled="{Binding CanEditOptions}">
+     <StackPanel>
+      <CheckBox Content="영상 다운로드 (끄면 오디오)" IsChecked="{Binding IsVideo}" />
+      <TextBlock Text="저장 형식" Style="{StaticResource Label}" />
+      <ComboBox ItemsSource="{Binding Formats}" SelectedItem="{Binding Format}" AutomationProperties.Name="영상별 저장 형식" />
+      <TextBlock Text="영상에서 제공하는 화질 / FPS" Style="{StaticResource Label}" />
+      <ComboBox ItemsSource="{Binding Qualities}" SelectedItem="{Binding SelectedQuality}" IsEnabled="{Binding IsVideo}" AutomationProperties.Name="영상별 화질" />
+     </StackPanel>
+    </Border>
+    <TextBlock Text="자막" Style="{StaticResource SectionTitle}" Margin="0,0,0,12" />
+    <Button Content="자막 언어 조회 / 새로고침" Command="{Binding LoadSubtitlesCommand}" />
+    <ComboBox ItemsSource="{Binding Subtitles}" SelectedItem="{Binding SelectedSubtitle}" Margin="0,10,0,10" AutomationProperties.Name="자막 언어" />
+    <StackPanel Orientation="Horizontal"><Button Content="SRT 자막 다운로드" Command="{Binding DownloadSubtitleCommand}" /><Button Content="자막 작업 취소" Command="{Binding CancelSubtitleCommand}" Margin="8,0,0,0" /></StackPanel>
+   </StackPanel>
+  </ScrollViewer>
+ </DockPanel>
+</UserControl>

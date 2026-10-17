@@ -11,7 +11,7 @@ src/GMTFV.WinForms/GMTFV.WinForms.csproj (WinForms, net472)
 tests/GMTFV.Tests (콘솔 테스트, 추가 패키지 없음)
 ```
 
-모든 소비자가 Windows/.NET Framework이므로 타깃을 유지했다. .NET Standard나 다른 런타임 호환성을 이번 빌드에서 검증한 것은 아니다. 기존 `Start/`, `Properties/` 경로와 사용자 설정 키, JSON/TXT 목록 스키마를 유지한다. `services/` 어댑터는 썸네일 Image를 포함한 기존 VideoInfo를 UI 독립 DownloadRequest로 변환한다.
+WinForms는 기존 net472 타깃을 유지한다. WPF를 위해 Core에 net10.0, DownloadEngine에 net10.0-windows 타깃을 추가했다. `src/GMTFV.Wpf`와 `tests/GMTFV.Wpf.Tests`는 .NET 10 WPF 앱/검사 프로젝트다. 기존 `Start/`, `Properties/` 경로와 사용자 설정 키, JSON/TXT 목록 스키마를 유지한다. WinForms의 `services/` 어댑터는 썸네일 Image를 포함한 기존 VideoInfo를 UI 독립 DownloadRequest로 변환한다. WPF의 구조·저장 정책과 범위는 [WPF 안내](wpf-preview.md)를 참고한다.
 
 ## 책임
 

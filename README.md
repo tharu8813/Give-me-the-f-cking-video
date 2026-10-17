@@ -80,6 +80,26 @@ python tests/media_smoke.py --tools-dir "$env:APPDATA\GMTFV"
 
 로그는 `%LocalAppData%/GMTFV/Logs`에 저장하며 URL·인증값·사용자 홈 경로를 마스킹한다. 현재 로그와 이전 로그 하나만 보관한다.
 
+## WPF (.NET 10)
+
+새 UI는 `src/GMTFV.Wpf`에 별도 앱으로 제공한다. 짙은 잉크색과 라임 포인트의 큐 중심 화면, 모션, 설정/진단 패널을 갖춘 MVVM 앱이다. WinForms 안정판과 동일한 Core/DownloadEngine 소스를 사용하며 실행 파일과 설정은 분리한다.
+
+Windows x64, .NET 10 SDK가 필요하다. Visual Studio에서 전체 솔루션을 빌드하려면 .NET Framework 4.7.2 targeting pack도 유지해야 한다.
+
+```powershell
+dotnet build src/GMTFV.Wpf/GMTFV.Wpf.csproj -c Debug -m:1 -p:BuildInParallel=false
+dotnet run --project src/GMTFV.Wpf/GMTFV.Wpf.csproj --no-build
+dotnet build tests/GMTFV.Wpf.Tests/GMTFV.Wpf.Tests.csproj -c Debug -m:1 -p:BuildInParallel=false
+.\tests\GMTFV.Wpf.Tests\bin\Debug\net10.0-windows\GMTFV.Wpf.Tests.exe
+.\publish-wpf-preview.ps1
+```
+
+배포 ZIP은 `artifacts/GMTFV-Wpf.zip`, 실행 파일은 `GMTFV.Wpf.exe`다. .NET 10 **Desktop Runtime**이 설치된 Windows에서 압축을 풀어 실행한다. 안정판 Inno Setup 설치본을 덮어쓰지 않는다.
+
+설정은 일반·다운로드·형식·고급·도구 탭으로 나뉜다. 각 영상 행의 설정 버튼에서 기본값 사용 여부, 영상/오디오, 형식과 실제 제공 화질/FPS를 지정하고 일반·자동 자막을 SRT로 저장할 수 있다. JSON 목록에는 영상별 설정도 보관하며 TXT에는 URL만 보관한다. 목록과 설정 패널에는 부드러운 휠 스크롤을 적용하고 Windows 애니메이션 설정과 모션 줄이기를 반영한다.
+
+설정/로그는 기존 WPF 설정 보존을 위해 `%LocalAppData%/GMTFV.Preview` 경로를 유지한다. WPF 설정은 앱에서 별도로 구성하며 WinForms 설정 가져오기는 제공하지 않는다. 도구는 기본적으로 기존 `%AppData%/GMTFV`를 읽으며 도구 경로를 변경할 수 있다. WPF에는 자동 도구 설치/업데이트가 없으므로 안정판에서 도구를 준비하거나 직접 폴더를 지정한다. [구현 범위·검증·차이점](docs/wpf-preview.md)과 [WinForms 기능 대조·UI 안정화](docs/wpf-feature-parity.md)를 참고한다.
+
 ## 라이선스
 
 GMTFV는 [GPL-3.0](LICENSE.txt)으로 배포한다. 외부 도구에는 각각의 [라이선스와 고지](THIRD-PARTY-NOTICES.md)가 적용된다. 다운로드 권한이 있는 콘텐츠에 사용한다.
