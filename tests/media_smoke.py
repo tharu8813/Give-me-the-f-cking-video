@@ -3,6 +3,8 @@ Usage: python tests/media_smoke.py --tools-dir <directory containing yt-dlp.exe 
 """
 import argparse
 import functools
+import hashlib
+import time
 import http.server
 import json
 from pathlib import Path
@@ -27,7 +29,7 @@ def main():
     yt = args.tools_dir / "yt-dlp.exe"
     assert harness.exists() and ffmpeg.exists() and yt.exists(), "Build the test harness and prepare the tools first"
     output = harness.parent
-    with tempfile.TemporaryDirectory(prefix="media-smoke-", dir=output) as folder:
+    with tempfile.TemporaryDirectory(prefix="한글 공백-media-smoke-", dir=output) as folder:
         work = Path(folder)
         for name, source, codec in [("video.mp4", "testsrc2=size=160x120:rate=30:duration=1", "libx264"),
                                     ("video.webm", "testsrc2=size=160x120:rate=30:duration=1", "libvpx-vp9"),
@@ -57,18 +59,16 @@ def main():
                                                formats=formats)), encoding="utf-8")
             passed = 0
             for media_type, extensions in [("video", ["mp4", "mkv", "avi", "mov", "webm", "flv"]),
-                                           ("audio", ["mp3", "m4a", "aac", "opus", "ogg", "wav", "flac"])]:
+                                           ("audio", ["original", "mp3", "m4a", "aac", "opus", "ogg", "wav", "flac"])]:
                 for extension in extensions:
-                    template = str(work / f"{media_type}-{extension}.%(ext)s")
-                    command = json.loads(run([harness, "--emit-command", args.tools_dir, extension, media_type, template]).stdout)
-                    # Supply our own generated metadata instead of contacting YouTube.
-                    assert command[-2] == "--"
-                    command = command[:-2] + ["--verbose", "--load-info-json", str(fixture)]
-                    result = run([yt, *command])
-                    lines = [line for line in result.stdout.splitlines() if line.startswith("GMTFV_FILE:")]
-                    assert len(lines) == 1, result.stdout + result.stderr
-                    path = Path(json.loads(lines[0].split(":", 1)[1]))
-                    assert path.suffix == "." + extension and path.stat().st_size > 0, path
+                    target = work / f"{media_type}-{extension}.{extension}"
+                    started = time.perf_counter()
+                    result = run([harness, "--media-download", args.tools_dir, extension, media_type, fixture, target])
+                    path = Path(json.loads(result.stdout))
+                    seconds = time.perf_counter() - started
+                    assert path.suffix == (".webm" if extension == "original" else "." + extension) and path.stat().st_size > 0, path
+                    assert "STAGE Completed/" in result.stderr and "STAGE Validating/Save" in result.stderr
+                    print(f"METRIC engine {media_type} {extension}: {seconds:.3f}s", flush=True)
                     decoded = run([ffmpeg, "-hide_banner", "-i", path, "-f", "null", "-"])
                     if media_type == "video" and extension in ("mp4", "mkv", "mov"):
                         original = work / ("video.webm" if "Video: vp9" in decoded.stderr else "video.mp4")
@@ -79,6 +79,63 @@ def main():
                         assert expected == actual, "Unexpected video re-encode"
                     passed += 1
                     print(f"PASS real yt-dlp/FFmpeg {media_type} {extension}", flush=True)
+            # Probe every explicit audio policy with real codecs, including same-extension mismatches.
+            for name, codec in [("aac.aac", "aac"), ("mp3.mp3", "libmp3lame"), ("vorbis.ogg", "libvorbis"), ("opus.opus", "libopus"), ("flac.flac", "flac"), ("pcm.wav", "pcm_s24le")]:
+                run([ffmpeg, "-v", "error", "-f", "lavfi", "-i", "sine=frequency=440:duration=1", "-c:a", codec, work / name])
+            cases = [("audio.m4a", "m4a", "aac", "direct"), ("audio.m4a", "aac", "aac", "copy"),
+                     ("aac.aac", "m4a", "aac", "copy"), ("audio.webm", "opus", "opus", "copy"),
+                     ("opus.opus", "opus", "opus", "direct"), ("vorbis.ogg", "ogg", "vorbis", "direct"),
+                     ("opus.opus", "ogg", "vorbis", "encode"), ("mp3.mp3", "mp3", "mp3", "direct"),
+                     ("flac.flac", "flac", "flac", "direct"), ("pcm.wav", "wav", "pcm_s24le", "direct"),
+                     ("audio.m4a", "flac", "flac", "encode"), ("audio.m4a", "wav", "pcm_s16le", "encode"),
+                     ("audio.m4a", "original", "aac", "direct"), ("audio.webm", "original", "opus", "direct")]
+            for index, (source_name, extension, codec, policy) in enumerate(cases):
+                source = work / source_name
+                info = dict(id="BaW_jenozKc", title="Audio policy integration", duration=1, extractor="generic", extractor_key="Generic", webpage_url=base,
+                            formats=[dict(format_id="source", url=base + source_name, ext=source.suffix[1:], protocol="http", vcodec="none", acodec=codec)])
+                fixture.write_text(json.dumps(info), encoding="utf-8")
+                target = work / f"policy-{index}.{extension}"
+                result = run([harness, "--media-download", args.tools_dir, extension, "audio", fixture, target])
+                path = Path(json.loads(result.stdout))
+                probe = json.loads(run([args.tools_dir / "ffprobe.exe", "-v", "error", "-show_streams", "-show_format", "-of", "json", path]).stdout)
+                assert probe["streams"][0]["codec_name"] == codec, probe
+                if policy == "direct":
+                    assert hashlib.sha256(source.read_bytes()).digest() == hashlib.sha256(path.read_bytes()).digest(), "Direct save changed media bytes"
+                    assert "Converting/EncodeAudio" not in result.stderr and "Converting/Remux" not in result.stderr
+                elif policy == "copy":
+                    assert "Converting/Remux" in result.stderr and "Converting/EncodeAudio" not in result.stderr
+                else:
+                    assert "Converting/EncodeAudio" in result.stderr
+                run([ffmpeg, "-v", "error", "-i", path, "-f", "null", "-"])
+                passed += 1
+                print(f"PASS real policy {source_name} -> {extension}: {policy}", flush=True)
+            # Cancel the owned FFmpeg while it processes real input, then recover from a real encoder failure.
+            fixture.write_text(json.dumps(dict(id="BaW_jenozKc", title="Cancel audio fixture", duration=1, extractor="generic", extractor_key="Generic", webpage_url=base,
+                formats=[dict(format_id="source", url=base + "audio.webm", ext="webm", vcodec="none", acodec="opus", protocol="http")])), encoding="utf-8")
+            cancelled = run([harness, "--media-download", args.tools_dir, "mp3", "audio", fixture, work / "cancelled.mp3", "cancel-audio"])
+            assert json.loads(cancelled.stdout) == "cancelled" and "STAGE Cancelled/" in cancelled.stderr and "STAGE Completed/" not in cancelled.stderr
+            passed += 1; print("PASS cancel actual FFmpeg audio conversion", flush=True)
+            failed = subprocess.run([str(x) for x in [harness, "--media-download", args.tools_dir, "mp3", "audio", fixture, work / "recover.mp3", "fail-audio"]], capture_output=True, text=True, encoding="utf-8", errors="replace", timeout=60)
+            assert failed.returncode != 0 and "STAGE Failed/" in failed.stderr and "STAGE Completed/" not in failed.stderr
+            recovered = run([harness, "--media-download", args.tools_dir, "mp3", "audio", fixture, work / "recover.mp3"])
+            run([ffmpeg, "-v", "error", "-i", Path(json.loads(recovered.stdout)), "-f", "null", "-"])
+            passed += 1; print("PASS actual FFmpeg failure and manual retry recovery", flush=True)
+            fixture.write_text(json.dumps(dict(id="BaW_jenozKc", title="Cancel merge fixture", duration=1, extractor="generic", extractor_key="Generic", webpage_url=base, formats=formats)), encoding="utf-8")
+            cancelled = run([harness, "--media-download", args.tools_dir, "mp4", "video", fixture, work / "cancelled-merge.mp4", "cancel-merge"])
+            assert json.loads(cancelled.stdout) == "cancelled" and "STAGE Merging/Merge" in cancelled.stderr and "STAGE Completed/" not in cancelled.stderr
+            passed += 1; print("PASS cancel yt-dlp FFmpeg merge", flush=True)
+            # Combined stream fallback still extracts audio without re-encoding AAC.
+            combined = work / "combined.mp4"
+            run([ffmpeg, "-v", "error", "-i", work / "video.mp4", "-i", work / "audio.m4a", "-c", "copy", combined])
+            fixture.write_text(json.dumps(dict(id="BaW_jenozKc", title="Combined fallback", duration=1, extractor="generic", extractor_key="Generic", webpage_url=base,
+                formats=[dict(format_id="combined", url=base + "combined.mp4", ext="mp4", vcodec="h264", acodec="aac", protocol="http", height=120, fps=30)])), encoding="utf-8")
+            for kind, extension in [("video", "mp4"), ("video", "mkv"), ("audio", "m4a")]:
+                result = run([harness, "--media-download", args.tools_dir, extension, kind, fixture, work / f"combined-{kind}.{extension}"])
+                path = Path(json.loads(result.stdout)); run([ffmpeg, "-v", "error", "-i", path, "-f", "null", "-"])
+                if kind == "audio":
+                    assert "Converting/Remux" in result.stderr
+                passed += 1
+                print(f"PASS combined source {kind} {extension}", flush=True)
             print(f"RESULT: {passed} media integrations passed")
         finally:
             server.shutdown()

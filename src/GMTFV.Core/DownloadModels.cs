@@ -3,6 +3,7 @@ using System;
 namespace GMTFV.Core {
     public enum DownloadState { Queued, Metadata, Ready, Downloading, Merging, Converting, Retrying, Validating, Completed, Failed, Cancelled }
     public enum DownloadError { Unknown, Network, Timeout, Forbidden, RateLimited, Client, PoToken, Format, FFmpeg, Permission, DiskFull, Unavailable, MissingTool, InvalidOutput, Cancelled }
+    public enum DownloadStage { None, Download, VideoDownload, AudioDownload, Merge, Remux, ExtractAudio, EncodeAudio, EncodeVideo, Validate, Save }
 
     public sealed class DownloadRequest {
         public string Url { get; set; }
@@ -18,12 +19,14 @@ namespace GMTFV.Core {
 
     public sealed class DownloadProgress {
         public DownloadState State { get; set; }
+        public DownloadStage Stage { get; set; }
+        public string StreamId { get; set; }
         public int? Percent { get; set; }
         public string Message { get; set; }
     }
 
     public static class MediaFormats {
         public static readonly string[] Video = { "mp4", "mkv", "avi", "mov", "webm", "flv" };
-        public static readonly string[] Audio = { "mp3", "m4a", "aac", "opus", "ogg", "wav", "flac" };
+        public static readonly string[] Audio = { "original", "mp3", "m4a", "aac", "opus", "ogg", "wav", "flac" };
     }
 }

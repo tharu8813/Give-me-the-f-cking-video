@@ -26,6 +26,11 @@ public sealed class InverseBooleanConverter : IValueConverter
     public object Convert(object value, Type targetType, object parameter, CultureInfo culture) => value is not true;
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => Binding.DoNothing;
 }
+public sealed class ModeRadioConverter : IValueConverter
+{
+    public object Convert(object value, Type targetType, object parameter, CultureInfo culture) => value is bool video && video == ((string)parameter == "Video");
+    public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture) => value is true ? (string)parameter == "Video" : Binding.DoNothing;
+}
 public sealed class ThumbnailConverter : IValueConverter
 {
     public object? Convert(object value, Type targetType, object parameter, CultureInfo culture)

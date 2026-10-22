@@ -19,7 +19,7 @@
     <TextBlock Grid.Row="1" Text="{Binding Channel}" Style="{StaticResource Caption}" TextTrimming="CharacterEllipsis" />
     <Button Grid.Row="2" Content="{Binding Selection}" Command="{Binding DataContext.EditItemCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}" HorizontalAlignment="Left" Style="{StaticResource QuietButton}" MinHeight="22" Padding="0,2" FontSize="11" ToolTip="형식·해상도·FPS와 기본값 상속 수정" />
     <Grid Grid.Row="3" VerticalAlignment="Bottom">
-     <TextBlock Text="{Binding Message}" FontSize="11" Foreground="{DynamicResource MutedBrush}" TextTrimming="CharacterEllipsis" ToolTip="{Binding Message}" />
+     <TextBlock Text="{Binding ActivityText}" FontSize="11" Foreground="{DynamicResource MutedBrush}" TextTrimming="CharacterEllipsis" ToolTip="{Binding ActivityText}" />
      <TextBlock Text="{Binding OutputPath}" FontSize="11" Foreground="{DynamicResource SuccessBrush}" TextTrimming="CharacterEllipsis" ToolTip="{Binding OutputPath}" Visibility="{Binding HasOutput, Converter={StaticResource BoolVisibility}}" Background="{DynamicResource PanelBrush}" />
     </Grid>
    </Grid>

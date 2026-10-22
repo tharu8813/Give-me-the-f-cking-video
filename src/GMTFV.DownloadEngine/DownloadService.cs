@@ -45,6 +45,8 @@ namespace GMTFV.DownloadEngine {
                 for (int attempt = 1; ; attempt++) {
                     string completedPath = null;
                     DownloadState state = DownloadState.Downloading;
+                    DownloadStage stage = DownloadStage.None;
+                    string stream = null;
                     DateTime lastReport = DateTime.MinValue;
                     Report(progress, state, null, "다운로드 중 (시도 " + attempt + ")");
                     log.Write(id, "attempt=" + attempt + " strategy=default fallback=" + fallback + " cpu=" + cpu + " pluginsDisabled=" + disablePlugins);
@@ -59,23 +61,38 @@ namespace GMTFV.DownloadEngine {
                                 DownloadProgress parsed = ParseProgress(line);
                                 if (parsed == null) return;
                                 DateTime now = DateTime.UtcNow;
-                                if (parsed.State != state || (now - lastReport).TotalMilliseconds >= 200) {
+                                if (parsed.State != state || parsed.Stage != stage || parsed.StreamId != stream || (now - lastReport).TotalMilliseconds >= 200) {
                                     if (parsed.State != state) log.Write(id, "stage=" + parsed.State);
-                                    state = parsed.State; lastReport = now; progress?.Report(parsed);
+                                    state = parsed.State; stage = parsed.Stage; stream = parsed.StreamId; lastReport = now; progress?.Report(parsed);
                                 }
                             }
                         };
                         await client.RunAsync(YtDlpDownloadCommandFactory.Create(request, template, fallback, cpu, disablePlugins), TimeSpan.FromHours(6), token, id,
                             onLine, onLine).ConfigureAwait(false);
                         token.ThrowIfCancellationRequested();
+                        CompletedFile.Validate(completedPath, work, request.IsVideo ? request.Extension : "original");
+                        string downloadedSource = completedPath;
+                        if (!request.IsVideo) {
+                            Report(progress, DownloadState.Converting, null, "오디오 스트림 및 처리 방식 확인 중", DownloadStage.ExtractAudio);
+                            completedPath = await AudioProcessor.ProcessAsync(completedPath, request, directory, runner, progress, token).ConfigureAwait(false);
+                        }
                         Report(progress, DownloadState.Validating, null, "완료 파일 검증 중");
                         log.Write(id, "stage=validating");
                         CompletedFile.Validate(completedPath, work, request.Extension);
+                        var media = await MediaProbe.ReadAsync(directory, completedPath, runner, token).ConfigureAwait(false);
+                        string actualExtension = Path.GetExtension(completedPath).TrimStart('.').ToLowerInvariant();
+                        if (!media.MatchesContainer(actualExtension) || (request.IsVideo ? !media.HasVideo :
+                            string.IsNullOrEmpty(media.AudioCodec) || media.HasVideo || (request.Extension != "original" && !AudioProcessor.CompatibleCodec(media.AudioCodec, request.Extension))))
+                            throw new InvalidDataException("완료 파일의 실제 코덱·컨테이너·스트림이 요청한 형식과 다릅니다.");
                         token.ThrowIfCancellationRequested();
-                        string published = CompletedFile.Publish(completedPath, target);
+                        Report(progress, DownloadState.Validating, null, "결과 파일 저장 중", DownloadStage.Save);
+                        string published = CompletedFile.Publish(completedPath, request.Extension == "original" ? Path.ChangeExtension(target, actualExtension) : target);
                         log.Write(id, "stage=completed exit=0");
                         Report(progress, DownloadState.Completed, 100, "완료: " + Path.GetFileName(published));
-                        try { if (Directory.GetFileSystemEntries(work).Length == 0) Directory.Delete(work); }
+                        try {
+                            if (downloadedSource != completedPath && File.Exists(downloadedSource)) File.Delete(downloadedSource);
+                            if (Directory.GetFileSystemEntries(work).Length == 0) Directory.Delete(work);
+                        }
                         catch (IOException) { }
                         catch (UnauthorizedAccessException) { }
                         return published;
@@ -109,9 +126,12 @@ namespace GMTFV.DownloadEngine {
         }
 
         public static DownloadProgress ParseProgress(string line) {
-            if (line.StartsWith("GMTFV_POSTPROCESS:", StringComparison.Ordinal))
-                return new DownloadProgress { State = line.Contains("Merger") ? DownloadState.Merging : DownloadState.Converting,
-                    Message = line.Contains("Merger") ? "영상·오디오 병합 중" : "변환·컨테이너 처리 중" };
+            if (string.IsNullOrEmpty(line)) return null;
+            if (line.StartsWith("GMTFV_POSTPROCESS:", StringComparison.Ordinal)) {
+                string[] post = line.Substring("GMTFV_POSTPROCESS:".Length).Split('|');
+                if (post.Length < 2 || (post[1] != "started" && post[1] != "processing")) return null;
+                return Postprocess(post[0]);
+            }
             if (line.StartsWith("GMTFV_PROGRESS:", StringComparison.Ordinal)) {
                 string[] values = line.Substring("GMTFV_PROGRESS:".Length).Split('|');
                 if (values.Length < 4) return null;
@@ -119,15 +139,25 @@ namespace GMTFV.DownloadEngine {
                 if (double.TryParse(values[1].Trim().TrimEnd('%'), NumberStyles.Float, CultureInfo.InvariantCulture, out double number) && !double.IsNaN(number) && !double.IsInfinity(number))
                     percent = (int)Math.Max(0, Math.Min(99, number));
                 string speed = values[2].Trim(), eta = values[3].Trim();
+                var stage = values.Length >= 6 ? values[4] == "none" ? DownloadStage.AudioDownload : values[5] == "none" ? DownloadStage.VideoDownload : DownloadStage.Download : DownloadStage.Download;
+                string label = stage == DownloadStage.AudioDownload ? "오디오 스트림 다운로드" : stage == DownloadStage.VideoDownload ? "비디오 스트림 다운로드" : "다운로드";
                 return new DownloadProgress { State = DownloadState.Downloading, Percent = percent,
-                    Message = "다운로드 중" + (percent.HasValue ? " " + percent + "%" : "") + (speed == "N/A" || speed == "Unknown B/s" ? "" : " · " + speed) + (eta == "N/A" || eta == "Unknown" ? "" : " · 남은 시간 " + eta) };
+                    Stage = stage, StreamId = values.Length >= 7 ? values[6] : null,
+                    Message = label + (percent.HasValue ? " " + percent + "%" : "") + (speed == "N/A" || speed == "Unknown B/s" ? "" : " · " + speed) + (eta == "N/A" || eta == "Unknown" ? "" : " · 남은 시간 " + eta) };
             }
-            if (line.Contains("[Merger]")) return new DownloadProgress { State = DownloadState.Merging, Message = "영상·오디오 병합 중" };
-            if (Regex.IsMatch(line, @"\[(ExtractAudio|VideoConvertor|VideoRemuxer|Fixup\w*)\]"))
-                return new DownloadProgress { State = DownloadState.Converting, Message = "변환·컨테이너 처리 중" };
+            var match = Regex.Match(line, @"\[(Merger|ExtractAudio|VideoConvertor|VideoRemuxer|Fixup\w*)\]");
+            if (match.Success && !line.Contains("Not ")) return Postprocess(match.Groups[1].Value);
             return null;
         }
-        private static void Report(IProgress<DownloadProgress> progress, DownloadState state, int? percent, string message) =>
-            progress?.Report(new DownloadProgress { State = state, Percent = percent, Message = message });
+        private static DownloadProgress Postprocess(string processor) {
+            bool merge = processor.Contains("Merger"), remux = processor.Contains("Remux") || processor.Contains("Fixup"), audio = processor.Contains("ExtractAudio");
+            if (processor.Contains("MoveFiles")) return new DownloadProgress { State = DownloadState.Validating, Stage = DownloadStage.Save, Message = "작업 파일 정리 중" };
+            if (!merge && !remux && !audio && !processor.Contains("VideoConvertor")) return null;
+            return new DownloadProgress { State = merge ? DownloadState.Merging : DownloadState.Converting,
+                Stage = merge ? DownloadStage.Merge : remux ? DownloadStage.Remux : audio ? DownloadStage.ExtractAudio : DownloadStage.EncodeVideo,
+                Message = merge ? "영상·오디오 병합 중" : remux ? "컨테이너 변경·정리 중 · 재인코딩 없음" : audio ? "오디오 추출 중" : "영상 인코딩 중" };
+        }
+        private static void Report(IProgress<DownloadProgress> progress, DownloadState state, int? percent, string message, DownloadStage stage = DownloadStage.None) =>
+            progress?.Report(new DownloadProgress { State = state, Stage = stage, Percent = percent, Message = message });
     }
 }

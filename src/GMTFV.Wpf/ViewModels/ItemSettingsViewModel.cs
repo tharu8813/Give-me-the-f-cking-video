@@ -23,12 +23,15 @@ public sealed class ItemSettingsViewModel : ObservableObject, IDisposable
         set {
             if (!Set(ref isVideo, value)) return;
             Raise(nameof(Formats));
+            Raise(nameof(FormatChoices));
             Format = value ? "mp4" : "mp3";
         }
     }
     public string[] Formats => IsVideo ? MediaFormats.Video : MediaFormats.Audio;
+    public MediaFormatChoice[] FormatChoices => MediaFormatChoice.For(IsVideo);
+    public string FormatDescription => MediaFormatChoice.DescriptionFor(Format) + (IsVideo ? "" : "\n" + MediaFormatChoice.BitrateHint);
     private string format;
-    public string Format { get => format; set { if (value != null && Formats.Contains(value)) Set(ref format, value); } }
+    public string Format { get => format; set { if (value != null && Formats.Contains(value) && Set(ref format, value)) Raise(nameof(FormatDescription)); } }
     public QualityChoice[] Qualities { get; }
     public QualityChoice SelectedQuality { get; set; }
     public string UploadDate => Item.Metadata?.UploadDate.ToString("yyyy-MM-dd") ?? "—";

@@ -1,6 +1,6 @@
 #define MyAppName "GMTFV"
 #ifndef MyAppVersion
-  #define MyAppVersion "4.0.0.0"
+  #define MyAppVersion "4.0.1.0"
 #endif
 #ifndef MyAppGUID
   #define MyAppGUID "{{d27d3702-a216-4b19-aea8-d5367acee59f}"
@@ -8,7 +8,9 @@
 #define MyAppPublisher "Ji Beak min(tharu8813)"
 #define MyAppURL "https://github.com/tharu8813/Give-me-the-f-cking-video"
 #define MyAppExeName "GMTFV.Wpf.exe"
-#define SourcePath "artifacts\GMTFV-win-x64"
+#ifndef AppSourcePath
+  #define AppSourcePath "artifacts\GMTFV-win-x64"
+#endif
 
 [Setup]
 AppId={#MyAppGUID}
@@ -52,7 +54,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "{#SourcePath}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.pdb,*.log,*.tmp"
+Source: "{#AppSourcePath}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs; Excludes: "*.pdb,*.log,*.tmp"
 
 [InstallDelete]
 Type: files; Name: "{app}\GMTFV.exe"

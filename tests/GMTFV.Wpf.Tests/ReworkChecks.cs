@@ -97,8 +97,18 @@ internal static partial class Program
     }
     private static async Task CheckLiveToolSetupAsync()
     {
-        string folder = await Task.Run(() => new ToolSetupService(Path.Combine(Root, "live-tools")).InstallAsync(new Progress<string>(Console.WriteLine), CancellationToken.None));
+        string toolRoot = Path.Combine(Root, "한글 사용자 도구 with spaces");
+        var clock = Stopwatch.StartNew();
+        string folder = await Task.Run(() => new ToolSetupService(toolRoot).InstallAsync(new Progress<string>(Console.WriteLine), CancellationToken.None));
+        double cold = clock.Elapsed.TotalSeconds;
         Check(new[] { "yt-dlp.exe", "ffmpeg.exe", "ffprobe.exe", "deno.exe" }.All(n => File.Exists(Path.Combine(folder, n))), "live official tool bundle passes checksums and executable checks");
+        clock.Restart();
+        string cached = await Task.Run(() => new ToolSetupService(toolRoot).InstallAsync(new Progress<string>(Console.WriteLine), CancellationToken.None));
+        Console.WriteLine($"METRIC same release cold install={cold:F3}s, verified cache preparation={clock.Elapsed.TotalSeconds:F3}s (not old/new version benchmark)");
+        var tools = new ToolWorkspaceViewModel(toolRoot, new GMTFV.DownloadEngine.DiagnosticLog(Path.Combine(Root, "tool-logs")), CancellationToken.None);
+        await tools.CheckAsync(cached);
+        Check(!tools.Missing && Directory.Exists(folder), "fresh tool workspace checks the activated bundle and preserves the preceding bundle");
+        folder = cached;
         File.WriteAllText(Path.Combine("artifacts", "rework-live-tool-bundle.txt"), folder);
     }
     private static async Task CheckToolSetupAsync()
@@ -114,7 +124,7 @@ internal static partial class Program
         foreach (string fault in new[] { "checksum", "missing-digest", "foreign-url", "archive" }) {
             using var invalid = new HttpClient(new ToolReleaseFixture(fault));
             try { await new ToolSetupService(root, invalid, new EngineRunner()).InstallAsync(null, CancellationToken.None); throw new Exception("invalid tools accepted: " + fault); }
-            catch (InvalidDataException) { Check(Directory.Exists(installed) && !Directory.EnumerateDirectories(root, ".prepare-*").Any() && File.ReadAllText(sentinel) == "keep", "tool failure preserves installed bundle and clears staging: " + fault); }
+            catch (Exception ex) when (ex is InvalidDataException or CryptographicException) { Check(Directory.Exists(installed) && !Directory.EnumerateDirectories(root, ".prepare-*").Any() && File.ReadAllText(sentinel) == "keep", "tool failure preserves installed bundle and clears staging: " + fault); }
         }
         using var cancellation = new CancellationTokenSource(); cancellation.Cancel();
         try { await setup.InstallAsync(null, cancellation.Token); throw new Exception("tool cancellation ignored"); }
@@ -130,7 +140,8 @@ internal static partial class Program
         Check(vm.Items.All(i => i.Selection.Contains("720p")), "quick quality reaches inherited item selections");
         vm.Settings.FileNameTemplate = "%title%_%num3%";
         Check(vm.FileNamePreview == "나의 영상_001.mp4", "filename template has a live safe preview");
-        vm.SaveSettingsCommand.Execute(null); await Task.Delay(10);
+        vm.SaveSettingsCommand.Execute(null);
+        for (int attempt = 0; attempt < 500 && vm.SettingsStatus != "설정 저장됨"; attempt++) await Task.Delay(10);
         Check(vm.SettingsStatus == "설정 저장됨", "saving defaults clears unsaved state");
         vm.Items[0].State = DownloadState.Downloading; vm.Items[0].Percent = 100;
         Check(vm.OverallProgress == 0, "overall completion does not claim unvalidated downloads as complete");

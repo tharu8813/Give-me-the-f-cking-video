@@ -13,11 +13,13 @@ namespace GMTFV.DownloadEngine {
             string key = Path.GetFullPath(path) + ":" + File.GetLastWriteTimeUtc(path).Ticks;
             if (Versions.TryGetValue(key, out string cached)) return cached;
             try {
-                var result = await runner.RunAsync(path, Path.GetFileName(path).Equals("ffmpeg.exe", StringComparison.OrdinalIgnoreCase) ? "-version" : "--version",
+                string name = Path.GetFileName(path);
+                var result = await runner.RunAsync(path, name.Equals("ffmpeg.exe", StringComparison.OrdinalIgnoreCase) || name.Equals("ffprobe.exe", StringComparison.OrdinalIgnoreCase) ? "-version" : "--version",
                     TimeSpan.FromSeconds(5), token).ConfigureAwait(false);
                 result.EnsureSuccess();
                 string version = (result.Output ?? "").Split('\r', '\n')[0];
-                if (!string.IsNullOrWhiteSpace(version)) Versions[key] = version;
+                if (string.IsNullOrWhiteSpace(version)) return "unavailable: empty version response";
+                Versions[key] = version;
                 return version;
             } catch (OperationCanceledException) { throw; }
             catch (Exception ex) when (ex is ToolExecutionException || ex is TimeoutException || ex is System.ComponentModel.Win32Exception) { return "unavailable: " + ex.Message; }

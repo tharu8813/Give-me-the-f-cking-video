@@ -22,9 +22,9 @@
     <TextBlock Text="켜면 공통 설정의 영상/오디오·형식·화질을 따릅니다." Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,4,0,12" />
     <Border Style="{StaticResource SettingsCard}" IsEnabled="{Binding CanEditOptions}">
      <StackPanel>
-      <CheckBox Content="영상 다운로드 (끄면 오디오)" IsChecked="{Binding IsVideo}" />
+      <StackPanel Orientation="Horizontal" KeyboardNavigation.DirectionalNavigation="Cycle"><RadioButton Content="영상 다운로드" GroupName="ItemMode" IsChecked="{Binding IsVideo, Converter={StaticResource ModeRadio}, ConverterParameter=Video}" AutomationProperties.Name="영상 다운로드" /><RadioButton Content="오디오만 다운로드" GroupName="ItemMode" IsChecked="{Binding IsVideo, Converter={StaticResource ModeRadio}, ConverterParameter=Audio}" AutomationProperties.Name="오디오만 다운로드" /></StackPanel>
       <TextBlock Text="저장 형식" Style="{StaticResource Label}" />
-      <ComboBox ItemsSource="{Binding Formats}" SelectedItem="{Binding Format}" AutomationProperties.Name="영상별 저장 형식" />
+      <ComboBox ItemsSource="{Binding FormatChoices}" SelectedValuePath="Id" SelectedValue="{Binding Format}" ItemTemplate="{StaticResource FormatTemplate}" AutomationProperties.Name="영상별 저장 형식" /><TextBlock Text="{Binding FormatDescription}" Style="{StaticResource Caption}" TextWrapping="Wrap" Margin="0,8,0,0" />
       <TextBlock Text="영상에서 제공하는 화질 / FPS" Style="{StaticResource Label}" />
       <ComboBox ItemsSource="{Binding Qualities}" SelectedItem="{Binding SelectedQuality}" IsEnabled="{Binding IsVideo}" AutomationProperties.Name="영상별 화질" />
      </StackPanel>

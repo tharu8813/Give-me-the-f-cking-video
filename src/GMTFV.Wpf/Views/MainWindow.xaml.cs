@@ -4,6 +4,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Threading;
 using GMTFV.Wpf.ViewModels;
 namespace GMTFV.Wpf.Views;
 
@@ -12,6 +13,8 @@ public partial class MainWindow : Window
     private MainWindowViewModel ViewModel => (MainWindowViewModel)DataContext;
     private bool closing;
     private bool closeAllowed;
+    private UIElement? workspaceFocus, returnFocus;
+    private bool overlayOpen;
     public MainWindow(MainWindowViewModel viewModel)
     {
         InitializeComponent();
@@ -20,6 +23,9 @@ public partial class MainWindow : Window
         Width = Math.Min(Width, SystemParameters.WorkArea.Width);
         Height = Math.Min(Height, SystemParameters.WorkArea.Height);
         DataContext = viewModel;
+        PreviewGotKeyboardFocus += (_, e) => {
+            if (ViewModel.IsWorkspaceEnabled && e.NewFocus is UIElement element) workspaceFocus = element;
+        };
         SourceInitialized += (_, _) => {
             // Windows 10 keeps system chrome; these documented caption attributes require Windows 11.
             if (!OperatingSystem.IsWindowsVersionAtLeast(10, 0, 22000)) return;
@@ -37,11 +43,16 @@ public partial class MainWindow : Window
     private void PanelChanged(object? sender, PropertyChangedEventArgs e)
     {
         if (e.PropertyName is not (nameof(MainWindowViewModel.Panel) or nameof(MainWindowViewModel.Failure) or nameof(MainWindowViewModel.ItemSettings))) return;
-        Dispatcher.BeginInvoke(() => {
+        bool open = ViewModel.HasPanel || ViewModel.Failure != null || ViewModel.ItemSettings != null;
+        if (open && !overlayOpen) returnFocus = workspaceFocus;
+        overlayOpen = open;
+        // Wait for command availability to refresh before restoring a row's options button.
+        Dispatcher.BeginInvoke(DispatcherPriority.ContextIdle, () => {
             if (closing) return;
             if (ViewModel.Failure != null) FailureOverlay.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
             else if (ViewModel.ItemSettings != null) ItemOverlay.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
             else if (ViewModel.HasPanel) PanelOverlay.MoveFocus(new TraversalRequest(FocusNavigationDirection.First));
+            else if (returnFocus is { IsVisible: true, IsEnabled: true } && returnFocus.IsDescendantOf(this)) returnFocus.Focus();
             else UrlBox.Focus();
         });
     }

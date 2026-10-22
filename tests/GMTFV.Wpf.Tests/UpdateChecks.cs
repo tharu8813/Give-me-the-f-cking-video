@@ -15,11 +15,12 @@ internal static partial class Program
     private static async Task CheckLiveAppUpdateAsync()
     {
         var service = new AppUpdateService();
-        var release = await service.CheckAsync(new Version(3, 6, 0, 0), CancellationToken.None);
-        Check(release?.Version == new Version(4, 0, 0, 0), "official latest release offers the 4.0.0.0 installer to a 3.6 client");
+        var current = typeof(MainWindowViewModel).Assembly.GetName().Version!;
+        var release = await service.CheckAsync(new Version(4, 0, 0, 0), CancellationToken.None);
+        Check(release?.Version == current, $"official latest release offers the {current} installer to a 4.0.0.0 client");
         string installer = await service.DownloadAsync(release!, Path.Combine("artifacts", "app-update-smoke"), null, CancellationToken.None);
         Check(File.Exists(installer), "actual GitHub installer download passes release size and SHA-256 validation without execution");
-        Check(await service.CheckAsync(new Version(4, 0, 0, 0), CancellationToken.None) == null, "published current version correctly reports no update");
+        Check(await service.CheckAsync(current, CancellationToken.None) == null, "published current version correctly reports no update");
     }
 
     private static async Task CheckAppUpdatesAsync()
@@ -102,7 +103,7 @@ internal static partial class Program
         var window = new MainWindow(vm) { Width = 900, Height = 660, ShowActivated = false, ShowInTaskbar = false, WindowStartupLocation = WindowStartupLocation.Manual, Left = -30000, Top = -30000 };
         window.Show(); vm.Panel = "About";
         await Capture(window, Path.Combine("artifacts", "wpf-preview", "app-update.png"));
-        Check(vm.Version.Contains("4.0.0.0") && window.Icon != null, "official application displays version 4.0.0.0 and the product icon");
+        Check(vm.Version.Contains("4.0.1.0") && window.Icon != null, "application displays version 4.0.1.0 and the product icon");
         await vm.StopAsync(); window.Close(); await Task.Delay(80);
     }
 

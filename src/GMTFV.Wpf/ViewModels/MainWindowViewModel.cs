@@ -27,11 +27,20 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     private readonly HashSet<Task> operations = [];
     private bool disposed;
     private bool summaryPending;
+    private CancellationTokenSource? listCancellation;
+    public bool IsListBusy => listCancellation != null;
+    public string WorkspaceStatus => IsListBusy ? listStatus : SettingsStatus;
+    private string listStatus = "";
     private int toastSequence;
+    private readonly DispatcherTimer elapsedTimer;
     public ObservableCollection<DownloadItemViewModel> Items { get; } = [];
     public PreviewSettings Settings { get; }
     public bool ReduceMotion { get => Settings.ReduceMotion; set { Settings.ReduceMotion = value; Motion.ReduceMotion = value; Raise(); } }
     public string[] Formats => Settings.IsVideo ? MediaFormats.Video : MediaFormats.Audio;
+    public MediaFormatChoice[] FormatChoices => MediaFormatChoice.For(Settings.IsVideo);
+    public string FormatDescription => MediaFormatChoice.DescriptionFor(Settings.Format);
+    public string BitrateHint => MediaFormatChoice.BitrateHint;
+    public bool CanSetBitrate => Settings.IsVideo ? Settings.Format is "avi" or "flv" : Settings.Format is not ("original" or "flac" or "wav");
     public string? SelectedFormat
     {
         get => Settings.Format;
@@ -46,7 +55,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public string SelectedMode { get => Settings.IsVideo ? "영상" : "오디오"; set => Settings.IsVideo = value == "영상"; }
     public int SelectedHeight { get => Settings.Height; set => Settings.Height = value; }
     public string SettingsStatus => JsonSerializer.Serialize(Settings) == savedSettings ? "설정 저장됨" : "변경됨 · 저장하면 다음 실행에도 유지됩니다";
-    public string FileNamePreview => WindowsFileName.Build("나의 영상", "채널", "abcdefghijk", Settings.Format, Settings.FileNameTemplate, 1);
+    public string FileNamePreview {
+        get {
+            string name = WindowsFileName.Build("나의 영상", "채널", "abcdefghijk", Settings.Format, Settings.FileNameTemplate, 1);
+            return Settings.Format == "original" ? Path.GetFileNameWithoutExtension(name) + ".[원본 확장자]" : name;
+        }
+    }
     public int[] ConcurrencyChoices { get; } = Enumerable.Range(1, 16).ToArray();
     public string[] Encoders { get; } = ["libx264", "h264_nvenc", "h264_amf", "h264_qsv"];
     public int[] AudioBitrates => new[] { 32, 64, 96, 128, 160, 192, 256, 320, 384, 448, 512, Settings.AudioBitrate }.Distinct().Order().ToArray();
@@ -66,7 +80,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public string DisplayedPanel { get; private set; } = "";
     public string PanelTitle => DisplayedPanel switch { "Settings" => "설정", "Diagnostics" => "도구 및 진단", "About" => "앱 정보", _ => "" };
     public bool HasPanel => Panel.Length > 0;
-    public bool IsWorkspaceEnabled => !HasPanel && Failure == null && ItemSettings == null && !Tools.IsPreparing && !applyingUpdate;
+    public bool IsWorkspaceEnabled => !HasPanel && Failure == null && ItemSettings == null && !Tools.IsPreparing && !installingTools && !applyingUpdate;
     private ItemSettingsViewModel? itemSettings;
     public ItemSettingsViewModel? ItemSettings { get => itemSettings; private set { if (value != null) { DisplayedItemSettings = value; Raise(nameof(DisplayedItemSettings)); } if (Set(ref itemSettings, value)) Raise(nameof(IsWorkspaceEnabled)); } }
     public ItemSettingsViewModel? DisplayedItemSettings { get; private set; }
@@ -74,8 +88,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public DownloadItemViewModel? Failure { get => failure; set { if (Set(ref failure, value)) Raise(nameof(IsWorkspaceEnabled)); } }
     private bool isRunning;
     public bool IsRunning { get => isRunning; private set { if (Set(ref isRunning, value)) Raise(nameof(CanEditSettings)); } }
-    private bool applyingUpdate;
-    public bool CanEditSettings => !IsRunning && !Tools.IsPreparing && !applyingUpdate;
+    private bool applyingUpdate, installingTools;
+    public bool CanEditSettings => !IsRunning && !Tools.IsPreparing && !installingTools && !applyingUpdate;
     public ToolWorkspaceViewModel Tools { get; }
     public AppUpdateViewModel Updates { get; }
     public int CompletedCount => Items.Count(i => i.State == DownloadState.Completed);
@@ -105,6 +119,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public ICommand CheckToolsCommand { get; }
     public ICommand SaveListCommand { get; }
     public ICommand LoadListCommand { get; }
+    public ICommand CancelListCommand { get; }
     public ICommand EditItemCommand { get; }
     public ICommand SaveItemCommand { get; }
     public ICommand CloseItemCommand { get; }
@@ -124,6 +139,9 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public MainWindowViewModel(IDownloadBackend backend, SettingsStore store, DiagnosticLog log, AppUpdateService? appUpdates = null)
     {
         this.backend = backend; this.log = log; this.store = store;
+        elapsedTimer = new DispatcherTimer(DispatcherPriority.Background) { Interval = TimeSpan.FromSeconds(1) };
+        elapsedTimer.Tick += (_, _) => { foreach (var item in Items.Where(i => i.CanCancel)) item.TickElapsed(); };
+        elapsedTimer.Start();
         Items.CollectionChanged += ItemsChanged;
         try { Settings = store.Load(); }
         catch (Exception ex) { Settings = new PreviewSettings(); Toast = "설정 로드 실패 · " + ex.Message; log.Write("settings", ex.Message); }
@@ -147,18 +165,19 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         PanelCommand = new RelayCommand(p => Panel = Panel == (string?)p ? "" : (string?)p ?? "");
         OpenReleaseCommand = Async(_ => { Process.Start(new ProcessStartInfo(AppUpdateService.Repository + "/releases/latest") { UseShellExecute = true }); return Task.CompletedTask; });
         FailureCommand = new RelayCommand(p => Failure = p as DownloadItemViewModel);
-        SaveSettingsCommand = Async(_ => { store.Save(Settings); savedSettings = JsonSerializer.Serialize(Settings); Raise(nameof(SettingsStatus)); Notify("설정이 저장되었습니다."); return Task.CompletedTask; });
+        SaveSettingsCommand = Async(async _ => { string snapshot = JsonSerializer.Serialize(Settings); await Task.Run(() => store.Save(JsonSerializer.Deserialize<PreviewSettings>(snapshot)!)); savedSettings = snapshot; Raise(nameof(SettingsStatus)); Raise(nameof(WorkspaceStatus)); Notify("설정이 저장되었습니다."); });
         ModeChangedCommand = new RelayCommand(_ => RefreshSelections());
         ResetSettingsCommand = new RelayCommand(_ => { var defaults = new PreviewSettings(); foreach (var p in typeof(PreviewSettings).GetProperties().Where(p => p.CanWrite)) p.SetValue(Settings, p.GetValue(defaults)); Notify("기본값으로 변경했습니다. 저장하면 다음 실행에도 적용됩니다."); }, _ => CanEditSettings);
-        ChooseOutputCommand = Async(_ => { PickFolder(false); return Task.CompletedTask; }, _ => !IsRunning);
-        ChooseToolsCommand = Async(_ => { PickFolder(true); return Task.CompletedTask; }, _ => !IsRunning);
+        ChooseOutputCommand = Async(_ => { PickFolder(false); return Task.CompletedTask; }, _ => CanEditSettings);
+        ChooseToolsCommand = Async(async _ => { if (PickFolder(true)) await Tools.CheckAsync(Settings.ToolFolder); }, _ => CanEditSettings && !Tools.IsChecking && ActiveCount == 0 && !IsListBusy && ItemSettings == null);
         OpenOutputCommand = Async(_ => { OpenFolder(Settings.OutputFolder); return Task.CompletedTask; });
         OpenLogsCommand = Async(_ => { OpenFolder(log.DirectoryPath); return Task.CompletedTask; });
-        CheckToolsCommand = Async(_ => Tools.CheckAsync(Settings.ToolFolder), _ => !applyingUpdate && !Tools.IsPreparing && !Tools.IsChecking);
-        InstallToolsCommand = Async(_ => InstallToolsAsync(), _ => CanEditSettings && !Tools.IsChecking && ActiveCount == 0 && ItemSettings == null);
+        CheckToolsCommand = Async(_ => Tools.CheckAsync(Settings.ToolFolder), _ => !applyingUpdate && !installingTools && !Tools.IsBusy);
+        InstallToolsCommand = Async(_ => InstallToolsAsync(), _ => CanEditSettings && !Tools.IsChecking && ActiveCount == 0 && !IsListBusy && ItemSettings == null);
         CancelToolSetupCommand = new RelayCommand(_ => Tools.Cancel(), _ => Tools.IsPreparing);
-        SaveListCommand = Async(_ => SaveListAsync());
-        LoadListCommand = Async(_ => LoadListAsync());
+        SaveListCommand = Async(_ => SaveListAsync(), _ => !IsListBusy && !applyingUpdate);
+        LoadListCommand = Async(_ => LoadListAsync(), _ => !IsListBusy && !Tools.IsPreparing && !applyingUpdate);
+        CancelListCommand = new RelayCommand(_ => listCancellation?.Cancel(), _ => IsListBusy);
         EditItemCommand = new RelayCommand(p => ItemSettings = new ItemSettingsViewModel((DownloadItemViewModel)p!, Settings, backend, lifetime.Token),
             p => !IsRunning && ItemSettings == null && p is DownloadItemViewModel { Metadata: not null, CanCancel: false, IsRemoving: false });
         SaveItemCommand = Async(async _ => { ItemSettings!.Apply(); RefreshSelections(); await CloseItemSettingsAsync(); }, _ => ItemSettings != null && !ItemSettings.IsBusy);
@@ -203,12 +222,14 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     }
     private void SettingsChanged(object? sender, PropertyChangedEventArgs e)
     {
+        if (e.PropertyName == nameof(PreviewSettings.ToolFolder)) Tools.Invalidate();
         if (e.PropertyName == nameof(PreviewSettings.IsVideo)) {
             Raise(nameof(Formats));
+            Raise(nameof(FormatChoices));
             if (!Formats.Contains(Settings.Format)) Settings.Format = Settings.IsVideo ? "mp4" : "mp3";
         }
         if (e.PropertyName == nameof(PreviewSettings.ReduceMotion)) Motion.ReduceMotion = Settings.ReduceMotion;
-        foreach (string name in new[] { nameof(SelectedMode), nameof(SelectedFormat), nameof(SelectedHeight), nameof(SettingsStatus), nameof(FileNamePreview) }) Raise(name);
+        foreach (string name in new[] { nameof(SelectedMode), nameof(SelectedFormat), nameof(SelectedHeight), nameof(SettingsStatus), nameof(FileNamePreview), nameof(FormatDescription), nameof(CanSetBitrate), nameof(WorkspaceStatus) }) Raise(name);
         if (e.PropertyName is nameof(PreviewSettings.IsVideo) or nameof(PreviewSettings.Format) or nameof(PreviewSettings.Height) or nameof(PreviewSettings.AudioBitrate)) RefreshSelections();
     }
 
@@ -219,7 +240,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         try { await task; } finally { operations.Remove(task); }
     }
     public Task AddUrlsAsync(string input) => TrackAsync(AddUrlsCoreAsync(input));
-    private async Task AddUrlsCoreAsync(string input, IReadOnlyDictionary<string, ItemDownloadOptions?>? options = null)
+    private async Task AddUrlsCoreAsync(string input, IReadOnlyDictionary<string, ItemDownloadOptions?>? options = null, CancellationToken importToken = default)
     {
         var added = new List<DownloadItemViewModel>();
         var urls = Items.Select(i => i.Url).ToHashSet(StringComparer.Ordinal);
@@ -236,11 +257,11 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         }
         RefreshSummary();
         Notify($"{added.Count}개 추가 · 중복 {duplicate}개 · 잘못된 주소 {invalid}개");
-        await Task.WhenAll(added.Select(LoadMetadataAsync));
+        await Task.WhenAll(added.Select(item => LoadMetadataAsync(item, importToken)));
     }
-    private async Task LoadMetadataAsync(DownloadItemViewModel item)
+    private async Task LoadMetadataAsync(DownloadItemViewModel item, CancellationToken importToken = default)
     {
-        using var cts = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token);
+        using var cts = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token, importToken);
         item.Cancellation = cts; item.Raise(nameof(DownloadItemViewModel.CanCancel)); item.State = DownloadState.Metadata;
         item.Error = ""; item.Message = "메타데이터 조회 중";
         bool acquired = false;
@@ -258,7 +279,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         catch (Exception ex) { Fail(item, ex); }
         finally { if (acquired) metadataSlots.Release(); item.Cancellation = null; item.Raise(nameof(DownloadItemViewModel.CanCancel)); item.Raise(nameof(DownloadItemViewModel.IsIndeterminate)); RefreshSummary(); }
     }
-    public Task StartAsync() => StartItemsAsync(Items.Where(i => i.State == DownloadState.Ready && !i.IsRemoving).ToArray());
+    public Task StartAsync() => TrackAsync(StartItemsAsync(Items.Where(i => i.State == DownloadState.Ready && !i.IsRemoving).ToArray()));
     private async Task StartItemsAsync(DownloadItemViewModel[] ready)
     {
         if (IsRunning || Tools.IsPreparing) return;
@@ -295,8 +316,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
                 AudioBitrate = options.AudioBitrate, AllowQualityFallback = options.AllowQualityFallback, VideoEncoder = options.VideoEncoder
             };
             var progress = new Progress<DownloadProgress>(p => {
-                if (item.Cancellation != cts || cts.IsCancellationRequested) return;
-                item.State = p.State; item.Percent = p.Percent; item.Message = p.Message;
+                if (item.Cancellation != cts || cts.IsCancellationRequested || item.State is DownloadState.Completed or DownloadState.Failed or DownloadState.Cancelled) return;
+                item.ApplyProgress(p);
             });
             item.OutputPath = await backend.DownloadAsync(request, options.ToolFolder, progress, cts.Token);
             item.State = DownloadState.Completed; item.Percent = 100; item.Message = "저장 완료 · " + Path.GetFileName(item.OutputPath);
@@ -305,7 +326,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         catch (Exception ex) { Fail(item, ex); }
         finally { if (slot.HasValue) queue.ReleaseSlot(slot.Value); item.Cancellation = null; item.Raise(nameof(DownloadItemViewModel.CanCancel)); item.Raise(nameof(DownloadItemViewModel.IsIndeterminate)); RefreshSummary(); }
     }
-    public async Task RetryAsync(DownloadItemViewModel item)
+    public Task RetryAsync(DownloadItemViewModel item) => TrackAsync(RetryCoreAsync(item));
+    private async Task RetryCoreAsync(DownloadItemViewModel item)
     {
         if (IsRunning || item.CanCancel) return;
         Toast = "";
@@ -316,11 +338,12 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         try { using var queue = new DownloadQueueService(1); await DownloadAsync(item, JsonSerializer.Deserialize<PreviewSettings>(JsonSerializer.Serialize(Settings))!, queue, Items.IndexOf(item) + 1); }
         finally { IsRunning = false; }
     }
-    public async Task RetryFailedAsync()
+    public Task RetryFailedAsync() => TrackAsync(RetryFailedCoreAsync());
+    private async Task RetryFailedCoreAsync()
     {
         if (IsRunning) return;
         var failed = Items.Where(i => i.State == DownloadState.Failed).ToArray();
-        await Task.WhenAll(failed.Where(i => i.Metadata == null).Select(LoadMetadataAsync));
+        await Task.WhenAll(failed.Where(i => i.Metadata == null).Select(item => LoadMetadataAsync(item)));
         if (IsRunning) return;
         var ready = failed.Where(i => i.Metadata != null && !i.CanCancel && !i.IsRemoving && i.State is DownloadState.Failed or DownloadState.Ready).ToArray();
         await StartItemsAsync(ready);
@@ -342,7 +365,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         try { await Task.Delay(6500, lifetime.Token); if (sequence == toastSequence) Toast = ""; }
         catch (OperationCanceledException) { }
     }
-    private void ItemChanged(object? sender, PropertyChangedEventArgs e) { if (e.PropertyName is nameof(DownloadItemViewModel.State) or nameof(DownloadItemViewModel.Percent) or nameof(DownloadItemViewModel.CanCancel)) RefreshSummary(); }
+    private void ItemChanged(object? sender, PropertyChangedEventArgs e) { if (e.PropertyName is nameof(DownloadItemViewModel.State) or nameof(DownloadItemViewModel.CanCancel)) RefreshSummary(); }
     private void ItemsChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
     {
         if (e.OldItems != null) foreach (DownloadItemViewModel item in e.OldItems) item.PropertyChanged -= ItemChanged;
@@ -370,7 +393,8 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         var s = options ?? Settings; var o = item?.Options;
         bool video = o?.IsVideo ?? s.IsVideo;
         int? height = o != null ? o.Height : s.Height == 0 ? null : s.Height;
-        return $"{(o?.Format ?? s.Format).ToUpperInvariant()} · {(video ? height == null ? "최고 화질" : height + "p" : s.AudioBitrate + " kbps")}" + (video && o?.Fps > 0 ? $" / {o.Fps} FPS" : "") + (o == null ? " · 기본값" : "");
+        string format = o?.Format ?? s.Format;
+        return $"{(format == "original" ? "원본 오디오" : format.ToUpperInvariant())} · {(video ? height == null ? "최고 화질" : height + "p" : format == "original" ? "원본 음질 · 변환 없음" : format is "wav" or "flac" ? "원본에 따라 변환" : "변환 시 " + s.AudioBitrate + " kbps")}" + (video && o?.Fps > 0 ? $" / {o.Fps} FPS" : "") + (o == null ? " · 기본값" : "");
     }
     public void RefreshSelections() { foreach (var i in Items.Where(i => i.State != DownloadState.Completed && !i.CanCancel)) i.Selection = SelectionText(item: i); }
     private async Task CloseItemSettingsAsync()
@@ -379,12 +403,13 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         if (current == null) return;
         try { await current.StopAsync(); } finally { current.Dispose(); }
     }
-    private void PickFolder(bool tools)
+    private bool PickFolder(bool tools)
     {
-        var picker = new OpenFolderDialog { Title = tools ? "yt-dlp / FFmpeg 도구 폴더" : "다운로드 저장 폴더" };
-        if (picker.ShowDialog() != true) return;
+        var picker = new OpenFolderDialog { Title = tools ? "기존 다운로드 도구가 있는 폴더" : "다운로드 저장 폴더" };
+        if (picker.ShowDialog() != true) return false;
         if (tools) Settings.ToolFolder = picker.FolderName; else Settings.OutputFolder = picker.FolderName;
         Raise(nameof(Settings));
+        return true;
     }
     private static void OpenFolder(string path) { Directory.CreateDirectory(path); Process.Start(new ProcessStartInfo(path) { UseShellExecute = true }); }
     public async Task InitializeAsync()
@@ -405,13 +430,13 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         catch (Exception ex) { ReportError(ex); }
         await updates;
     }
-    private bool CanInstallAppUpdate() => !disposed && !applyingUpdate && !IsRunning && ActiveCount == 0 && !Tools.IsPreparing && !Tools.IsChecking && ItemSettings == null && !Items.Any(i => i.IsRemoving);
+    private bool CanInstallAppUpdate() => !disposed && !applyingUpdate && !installingTools && !IsRunning && ActiveCount == 0 && !Tools.IsPreparing && !Tools.IsChecking && !IsListBusy && ItemSettings == null && !Items.Any(i => i.IsRemoving);
     private async Task InstallAppUpdateAsync(string installer)
     {
         if (!CanInstallAppUpdate()) throw new InvalidOperationException("진행 중인 작업을 마친 뒤 업데이트하세요.");
         applyingUpdate = true; Raise(nameof(IsWorkspaceEnabled)); Raise(nameof(CanEditSettings)); CommandManager.InvalidateRequerySuggested();
         try {
-            store.Save(Settings); savedSettings = JsonSerializer.Serialize(Settings); Raise(nameof(SettingsStatus));
+            string snapshot = JsonSerializer.Serialize(Settings); await Task.Run(() => store.Save(JsonSerializer.Deserialize<PreviewSettings>(snapshot)!)); savedSettings = snapshot; Raise(nameof(SettingsStatus)); Raise(nameof(WorkspaceStatus));
             await SaveListAsync(Path.Combine(store.DirectoryPath, "update-queue.json"));
             lifetime.Token.ThrowIfCancellationRequested();
             var start = new ProcessStartInfo(installer) { UseShellExecute = true };
@@ -430,15 +455,19 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     }
     private async Task InstallToolsAsync()
     {
-        string? folder = await Tools.PrepareAsync();
-        if (folder == null) return;
-        var snapshot = JsonSerializer.Deserialize<PreviewSettings>(JsonSerializer.Serialize(Settings))!;
-        snapshot.ToolFolder = folder;
-        store.Save(snapshot);
-        Settings.ToolFolder = folder;
-        savedSettings = JsonSerializer.Serialize(Settings); Raise(nameof(SettingsStatus));
-        await Tools.CheckAsync(folder);
-        Notify("검증한 도구 묶음이 준비되었습니다. 링크를 추가하세요.");
+        installingTools = true; Raise(nameof(CanEditSettings)); Raise(nameof(IsWorkspaceEnabled)); CommandManager.InvalidateRequerySuggested();
+        try {
+            string? folder = await Tools.PrepareAsync();
+            if (folder == null) return;
+            var snapshot = JsonSerializer.Deserialize<PreviewSettings>(JsonSerializer.Serialize(Settings))!;
+            snapshot.ToolFolder = folder;
+            await Task.Run(() => store.Save(snapshot));
+            Settings.ToolFolder = folder;
+            savedSettings = JsonSerializer.Serialize(Settings); Raise(nameof(SettingsStatus)); Raise(nameof(WorkspaceStatus));
+            await Tools.CheckAsync(folder);
+            if (Tools.IsReady) Notify("다운로드 준비가 끝났어요. 영상 링크를 추가해 주세요.");
+        }
+        finally { installingTools = false; Raise(nameof(CanEditSettings)); Raise(nameof(IsWorkspaceEnabled)); CommandManager.InvalidateRequerySuggested(); }
     }
     private async Task SaveListAsync()
     {
@@ -446,18 +475,26 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
         if (picker.ShowDialog() != true) return;
         await SaveListAsync(picker.FileName);
     }
-    public async Task SaveListAsync(string path)
+    public Task SaveListAsync(string path) => TrackAsync(SaveListCoreAsync(path));
+    private async Task SaveListCoreAsync(string path)
     {
-        string text = path.EndsWith(".txt", StringComparison.OrdinalIgnoreCase) ? string.Join(Environment.NewLine, Items.Select(i => i.Url)) : JsonSerializer.Serialize(Items.Select(i => new { i.Url, i.Options }), new JsonSerializerOptions { WriteIndented = true });
-        string temp = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        using var cts = BeginListOperation("목록을 저장하는 중…");
         try {
-            await File.WriteAllTextAsync(temp, text, lifetime.Token);
-            lifetime.Token.ThrowIfCancellationRequested();
-            File.Move(temp, path, true);
+            var entries = Items.Select(i => new QueueEntry(i.Url, i.Options)).ToArray();
+            await Task.Run(() => QueueListStore.SaveAsync(path, entries, cts.Token), cts.Token);
+            Notify("URL 목록이 저장되었습니다.");
         }
-        finally { if (File.Exists(temp)) File.Delete(temp); }
-        Notify("URL 목록이 저장되었습니다.");
+        catch (OperationCanceledException) { Notify("목록 저장을 취소했습니다. 기존 파일은 유지됩니다."); throw; }
+        finally { EndListOperation(); }
     }
+    private CancellationTokenSource BeginListOperation(string text)
+    {
+        if (IsListBusy) throw new InvalidOperationException("진행 중인 목록 작업을 마치거나 취소하세요.");
+        listCancellation = CancellationTokenSource.CreateLinkedTokenSource(lifetime.Token); listStatus = text;
+        Raise(nameof(IsListBusy)); Raise(nameof(WorkspaceStatus)); CommandManager.InvalidateRequerySuggested();
+        return listCancellation;
+    }
+    private void EndListOperation() { listCancellation = null; Raise(nameof(IsListBusy)); Raise(nameof(WorkspaceStatus)); CommandManager.InvalidateRequerySuggested(); }
     private async Task LoadListAsync()
     {
         var picker = new OpenFileDialog { Filter = "URL 목록 (*.json;*.txt)|*.json;*.txt" };
@@ -467,30 +504,19 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     public Task LoadListAsync(string path) => TrackAsync(LoadListCoreAsync(path));
     private async Task LoadListCoreAsync(string path)
     {
-        if (new FileInfo(path).Length > 2 * 1024 * 1024) throw new InvalidDataException("목록 파일은 2MB 이하로 선택하세요.");
-        string text = await File.ReadAllTextAsync(path, lifetime.Token);
-        var options = new Dictionary<string, ItemDownloadOptions?>();
-        if (path.EndsWith(".json", StringComparison.OrdinalIgnoreCase)) {
-            using var doc = JsonDocument.Parse(text);
-            var urls = new List<string>();
-            foreach (var entry in doc.RootElement.EnumerateArray()) {
-                string url = (entry.ValueKind == JsonValueKind.String ? entry.GetString() : entry.GetProperty("Url").GetString()) ?? "";
-                ItemDownloadOptions? value = null;
-                if (entry.ValueKind == JsonValueKind.Object && entry.TryGetProperty("Options", out var saved) && saved.ValueKind != JsonValueKind.Null)
-                    value = saved.Deserialize<ItemDownloadOptions>() ?? throw new InvalidDataException("영상별 설정이 비어 있습니다.");
-                else if (entry.ValueKind == JsonValueKind.Object && entry.TryGetProperty("IsTypeVideo", out var legacyMode)) {
-                    string quality = entry.TryGetProperty("Quality", out var q) ? q.GetString() ?? "" : "";
-                    int? height = int.TryParse(quality.TrimEnd('p'), out int h) && h > 0 ? h : null;
-                    value = new ItemDownloadOptions { IsVideo = legacyMode.GetBoolean(), Format = entry.GetProperty("SubType").GetString() ?? "",
-                        Height = height, Fps = height != null && entry.TryGetProperty("Fps", out var fps) && fps.GetInt32() > 0 ? fps.GetInt32() : null };
-                }
-                value?.Validate();
-                try { options.TryAdd(YouTubeUrl.Normalize(url), value); } catch (ArgumentException) { }
-                urls.Add(url);
+        using var cts = BeginListOperation("목록을 읽고 영상 정보를 확인하는 중…");
+        try {
+            var entries = await Task.Run(() => QueueListStore.LoadAsync(path, cts.Token), cts.Token);
+            var options = new Dictionary<string, ItemDownloadOptions?>();
+            foreach (var entry in entries) {
+                try { options.TryAdd(YouTubeUrl.Normalize(entry.Url), entry.Options); } catch (ArgumentException) { }
             }
-            text = string.Join("\n", urls);
+            cts.Token.ThrowIfCancellationRequested();
+            await AddUrlsCoreAsync(string.Join("\n", entries.Select(e => e.Url)), options, cts.Token);
+            cts.Token.ThrowIfCancellationRequested();
         }
-        await AddUrlsCoreAsync(text, options);
+        catch (OperationCanceledException) { Notify("목록 불러오기를 취소했습니다. 추가된 항목과 기존 파일은 유지됩니다."); }
+        finally { EndListOperation(); }
     }
     public async Task StopAsync()
     {
@@ -503,6 +529,7 @@ public sealed class MainWindowViewModel : ObservableObject, IDisposable
     {
         if (disposed) return;
         disposed = true; lifetime.Cancel();
+        elapsedTimer.Stop();
         Settings.PropertyChanged -= SettingsChanged;
         Tools.PropertyChanged -= ToolsChanged;
         Items.CollectionChanged -= ItemsChanged;

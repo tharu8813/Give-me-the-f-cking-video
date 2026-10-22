@@ -51,8 +51,8 @@ namespace GMTFV.DownloadEngine {
                 try {
                     process.Start();
                     job.Attach(process);
-                    stdout = PumpAsync(process.StandardOutput, output, 16 * 1024 * 1024, false);
-                    stderr = PumpAsync(process.StandardError, error, 64 * 1024, true);
+                    stdout = PumpAsync(process.StandardOutput, output, output == null ? 16 * 1024 * 1024 : 64 * 1024, output != null, () => job.Dispose());
+                    stderr = PumpAsync(process.StandardError, error, 64 * 1024, true, () => job.Dispose());
                     using (deadline.Token.Register(() => exited.TrySetCanceled())) {
                         await exited.Task.ConfigureAwait(false);
                         // A crashed parent can leave a child holding its pipes open.
@@ -60,7 +60,7 @@ namespace GMTFV.DownloadEngine {
                         await Task.WhenAll(stdout, stderr).ConfigureAwait(false);
                         deadline.Token.ThrowIfCancellationRequested();
                     }
-                    return new ProcessResult(process.ExitCode, stdout.Result, stderr.Result);
+                    return new ProcessResult(process.ExitCode, await stdout.ConfigureAwait(false), await stderr.ConfigureAwait(false));
                 } catch (OperationCanceledException) {
                     if (token.IsCancellationRequested) throw new OperationCanceledException(token);
                     throw new TimeoutException("외부 도구 응답 시간이 초과되었습니다.");
@@ -73,26 +73,37 @@ namespace GMTFV.DownloadEngine {
                     if (stdout != null && stderr != null) {
                         try { await Task.WhenAll(stdout, stderr).ConfigureAwait(false); }
                         catch (IOException) { }
-                        catch (InvalidDataException) { }
+                        catch (Exception) { /* Both drains are observed; preserve the original failure. */ }
                     }
                 }
             }
         }
 
-        private static async Task<string> PumpAsync(StreamReader reader, Action<string> report, int limit, bool keepTail) {
+        private static async Task<string> PumpAsync(StreamReader reader, Action<string> report, int limit, bool keepTail, Action stop) {
             var buffer = new StringBuilder();
             bool overflow = false;
             Exception callbackFailure = null;
-            string line;
-            while ((line = await reader.ReadLineAsync().ConfigureAwait(false)) != null) {
-                try { if (callbackFailure == null) report?.Invoke(line); }
-                catch (Exception ex) { callbackFailure = ex; }
-                buffer.AppendLine(line);
+            var line = new StringBuilder();
+            var chunk = new char[8192];
+            int count;
+            while ((count = await reader.ReadAsync(chunk, 0, chunk.Length).ConfigureAwait(false)) > 0) {
+                buffer.Append(chunk, 0, count);
                 if (buffer.Length > limit) {
                     overflow = true;
                     if (keepTail) buffer.Remove(0, buffer.Length - limit);
                     else buffer.Length = limit;
                 }
+                if (report == null || callbackFailure != null) continue;
+                for (int i = 0; i < count; i++) {
+                    if (chunk[i] == '\n') {
+                        try { report(line.ToString().TrimEnd('\r')); } catch (Exception ex) { callbackFailure = ex; stop(); }
+                        line.Clear();
+                        if (callbackFailure != null) break;
+                    } else if (line.Length < limit) line.Append(chunk[i]);
+                }
+            }
+            if (line.Length > 0 && callbackFailure == null) {
+                try { report?.Invoke(line.ToString()); } catch (Exception ex) { callbackFailure = ex; stop(); }
             }
             if (overflow && !keepTail) throw new InvalidDataException("외부 도구 출력이 허용 크기를 초과했습니다.");
             if (callbackFailure != null) throw new InvalidOperationException("진행 상태 처리에 실패했습니다.", callbackFailure);

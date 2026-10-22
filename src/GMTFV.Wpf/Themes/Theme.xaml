@@ -3,5 +3,7 @@
   <BooleanToVisibilityConverter x:Key="BoolVisibility" /><cv:HasValueConverter x:Key="HasValue" /><cv:InverseBooleanConverter x:Key="Inverse" /><cv:ThumbnailConverter x:Key="Thumbnail" />
   <cv:QualityLabelConverter x:Key="QualityLabel" />
   <cv:HasSelectionConverter x:Key="HasSelection" />
+  <cv:ModeRadioConverter x:Key="ModeRadio" />
+  <DataTemplate x:Key="FormatTemplate"><TextBlock Text="{Binding Name}" ToolTip="{Binding Description}" TextTrimming="CharacterEllipsis" /></DataTemplate>
   <DataTemplate x:Key="QualityTemplate"><TextBlock Text="{Binding Converter={StaticResource QualityLabel}}" /></DataTemplate>
 </ResourceDictionary>

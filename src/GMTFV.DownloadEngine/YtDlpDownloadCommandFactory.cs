@@ -14,9 +14,9 @@ namespace GMTFV.DownloadEngine {
             if (request.Height <= 0 || request.Fps <= 0) throw new ArgumentException("화질 정보가 올바르지 않습니다.");
             if (request.AudioBitrate < 32 || request.AudioBitrate > 512) throw new ArgumentException("오디오 비트레이트가 올바르지 않습니다.");
             if (string.IsNullOrWhiteSpace(outputTemplate)) throw new ArgumentException("출력 경로가 없습니다.");
-            var args = new List<string> { "--verbose", "--newline", "--no-simulate", "--no-quiet", "--no-overwrites", "--continue", "--windows-filenames", "--no-mtime",
+            var args = new List<string> { "--newline", "--no-simulate", "--no-quiet", "--no-overwrites", "--continue", "--windows-filenames", "--no-mtime",
                 "--print", "after_move:" + CompletedPrefix + "%(filepath)j", "--progress", "--progress-template",
-                "download:GMTFV_PROGRESS:%(progress.status)s|%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s",
+                "download:GMTFV_PROGRESS:%(progress.status)s|%(progress._percent_str)s|%(progress._speed_str)s|%(progress._eta_str)s|%(info.vcodec)s|%(info.acodec)s|%(info.format_id)s",
                 "--progress-template", "postprocess:GMTFV_POSTPROCESS:%(progress.postprocessor)s|%(progress.status)s" };
             if (disablePlugins) args.Add("--no-plugin-dirs");
             if (request.IsVideo) {
@@ -40,10 +40,8 @@ namespace GMTFV.DownloadEngine {
                     if (extension == "mp4" || extension == "mov") args.AddRange(new[] { "-S", "res,fps,vcodec:h264,acodec:aac" });
                 }
             } else {
-                args.AddRange(new[] { "-f", "bestaudio/best", "--extract-audio", "--audio-format", extension == "ogg" ? "vorbis" : extension,
-                    "--audio-quality", request.AudioBitrate + "K" });
-                // yt-dlp can retain M4A when its AAC stream already matches; enforce the requested ADTS container.
-                if (extension == "aac") args.AddRange(new[] { "--remux-video", "aac" });
+                // Decide from the downloaded codec/container, including same-extension mismatches.
+                args.AddRange(new[] { "-f", extension == "original" ? "bestaudio" : "bestaudio/best" });
             }
             args.AddRange(new[] { "-o", outputTemplate, "--", url });
             return args;

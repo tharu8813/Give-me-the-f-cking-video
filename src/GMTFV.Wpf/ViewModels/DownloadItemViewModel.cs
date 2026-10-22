@@ -1,4 +1,5 @@
 using GMTFV.Core;
+using System.Diagnostics;
 using GMTFV.DownloadEngine;
 using GMTFV.Wpf.Models;
 namespace GMTFV.Wpf.ViewModels;
@@ -20,16 +21,25 @@ public sealed class DownloadItemViewModel(string url) : ObservableObject
     public DownloadState State
     {
         get => state;
-        set { if (Set(ref state, value)) { Raise(nameof(StateText)); Raise(nameof(IsMetadata)); Raise(nameof(CanRetry)); Raise(nameof(CanCancel)); Raise(nameof(HasError)); Raise(nameof(IsIndeterminate)); Raise(nameof(HasOutput)); Raise(nameof(Phase)); Raise(nameof(ProgressText)); } }
+        set { if (Set(ref state, value)) { phaseClock.Restart(); Percent = null; Raise(nameof(ActivityText)); Raise(nameof(StateText)); Raise(nameof(IsMetadata)); Raise(nameof(CanRetry)); Raise(nameof(CanCancel)); Raise(nameof(HasError)); Raise(nameof(IsIndeterminate)); Raise(nameof(HasOutput)); Raise(nameof(Phase)); Raise(nameof(ProgressText)); } }
     }
     private int? percent;
     public int? Percent { get => percent; set { if (Set(ref percent, value)) { Raise(nameof(Progress)); Raise(nameof(IsIndeterminate)); Raise(nameof(ProgressText)); } } }
     public double Progress => Percent ?? 0;
     public bool IsIndeterminate => Percent == null && State is DownloadState.Metadata or DownloadState.Downloading or DownloadState.Merging or DownloadState.Converting or DownloadState.Retrying or DownloadState.Validating;
-    public string ProgressText => State is DownloadState.Downloading && Percent is int p ? $"{p}%" : State == DownloadState.Completed ? "저장됨" : "";
+    public string ProgressText => State is DownloadState.Downloading or DownloadState.Converting && Percent is int p ? $"{p}%" : State == DownloadState.Completed ? "저장됨" : "";
     public int Phase => State switch { DownloadState.Metadata => 0, DownloadState.Queued or DownloadState.Ready => 1, DownloadState.Downloading or DownloadState.Retrying => 2, DownloadState.Merging or DownloadState.Converting or DownloadState.Validating => 3, DownloadState.Completed => 4, _ => -1 };
     private string message = "메타데이터 대기 중";
-    public string Message { get => message; set => Set(ref message, value); }
+    public string Message { get => message; set { if (Set(ref message, value)) Raise(nameof(ActivityText)); } }
+    private readonly Stopwatch phaseClock = Stopwatch.StartNew();
+    private DownloadStage stage;
+    private string? streamId;
+    public string ActivityText => Message + (IsIndeterminate && State is not DownloadState.Retrying ? $" · {(int)phaseClock.Elapsed.TotalSeconds}초 경과" : "");
+    public void TickElapsed() { if (IsIndeterminate) Raise(nameof(ActivityText)); }
+    public void ApplyProgress(DownloadProgress progress) {
+        if (stage != progress.Stage || streamId != progress.StreamId) { phaseClock.Restart(); stage = progress.Stage; streamId = progress.StreamId; }
+        State = progress.State; Percent = progress.Percent; Message = progress.Message; Raise(nameof(ActivityText));
+    }
     private string error = "";
     public string Error { get => error; set { if (Set(ref error, value)) Raise(nameof(HasError)); } }
     public bool HasError => !string.IsNullOrEmpty(Error);

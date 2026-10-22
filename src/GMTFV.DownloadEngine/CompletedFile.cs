@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Text;
+using System.Linq;
 
 namespace GMTFV.DownloadEngine {
     public static class CompletedFile {
@@ -8,9 +9,13 @@ namespace GMTFV.DownloadEngine {
             if (string.IsNullOrWhiteSpace(path)) throw new InvalidDataException("yt-dlp 완료 파일 경로가 없습니다.");
             string full = Path.GetFullPath(path);
             string root = Path.GetFullPath(workDirectory).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            string actualExtension = Path.GetExtension(full).TrimStart('.').ToLowerInvariant();
             if (!full.StartsWith(root, StringComparison.OrdinalIgnoreCase) ||
-                !string.Equals(Path.GetExtension(full), "." + extension, StringComparison.OrdinalIgnoreCase))
+                (extension == "original" ? !new[] { "mp3", "m4a", "aac", "opus", "ogg", "wav", "flac", "webm", "weba", "mka", "mp4" }.Contains(actualExtension) :
+                !string.Equals(actualExtension, extension, StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidDataException("완료 파일 경로 또는 확장자가 일치하지 않습니다.");
+            for (string current = full; current.Length >= root.Length; current = Path.GetDirectoryName(current))
+                if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0) throw new InvalidDataException("완료 파일에 링크 경로를 사용할 수 없습니다.");
             byte[] header = new byte[12];
             using (var file = File.OpenRead(full)) {
                 if (file.Length < 12 || file.Read(header, 0, header.Length) != header.Length) throw new InvalidDataException("완료 파일이 비어 있거나 손상되었습니다.");
@@ -18,9 +23,9 @@ namespace GMTFV.DownloadEngine {
             string first = Encoding.ASCII.GetString(header, 0, 4);
             string type = Encoding.ASCII.GetString(header, 8, 4);
             bool valid;
-            switch (extension.ToLowerInvariant()) {
+            switch (actualExtension) {
                 case "mp4": case "mov": case "m4a": valid = Encoding.ASCII.GetString(header, 4, 4) == "ftyp"; break;
-                case "mkv": case "webm": valid = header[0] == 0x1a && header[1] == 0x45 && header[2] == 0xdf && header[3] == 0xa3; break;
+                case "mkv": case "webm": case "mka": case "weba": valid = header[0] == 0x1a && header[1] == 0x45 && header[2] == 0xdf && header[3] == 0xa3; break;
                 case "wav": valid = first == "RIFF" && type == "WAVE"; break;
                 case "avi": valid = first == "RIFF" && type == "AVI "; break;
                 case "flac": valid = first == "fLaC"; break;

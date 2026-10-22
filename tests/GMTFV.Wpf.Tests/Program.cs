@@ -32,7 +32,7 @@ internal static partial class Program
         PresentationTraceSources.DataBindingSource.Listeners.Add(Errors);
         PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Error;
         SynchronizationContext.SetSynchronizationContext(new DispatcherSynchronizationContext());
-        var task = args.Contains("--app-update-smoke") ? CheckLiveAppUpdateAsync() : args.Contains("--tool-setup-smoke") ? CheckLiveToolSetupAsync() : args.Contains("--live-metadata-smoke") ? CheckLiveMetadataAsync() : args.Contains("--motion-demo") ? CaptureMotionDemoAsync() : args.Contains("--queue-check") ? CheckQueueOrderAsync() : RunAsync();
+        var task = args.Contains("--app-update-smoke") ? CheckLiveAppUpdateAsync() : args.Contains("--tool-setup-smoke") ? CheckLiveToolSetupAsync() : args.Contains("--live-metadata-smoke") ? CheckLiveMetadataAsync() : args.Contains("--motion-demo") ? CaptureMotionDemoAsync() : args.Contains("--queue-check") ? CheckQueueOrderAsync() : args.Contains("--ui-ux-check") ? CheckUiUxAsync() : RunAsync();
         task.ContinueWith(_ => app.Dispatcher.BeginInvokeShutdown(DispatcherPriority.Background), TaskScheduler.Default);
         Dispatcher.Run();
         try { task.GetAwaiter().GetResult(); Console.WriteLine($"PASS {passed} WPF checks"); return 0; }
@@ -151,6 +151,9 @@ internal static partial class Program
         await CheckQueueOrderAsync();
         await CheckReworkAsync();
         await CheckToolSetupAsync();
+        await CheckDiagnosticsAsync();
+        await CheckStabilityAsync();
+        await CheckUiUxAsync();
         await CheckShowcaseAsync();
         await CheckItemFeaturesAsync();
         using var render = Create(new FakeBackend(), "render");
@@ -195,15 +198,16 @@ internal static partial class Program
                 }
                 tabs.SelectedIndex = 2; await LayoutAsync(window);
                 var format = Find<ComboBox>(window).Single(c => System.Windows.Automation.AutomationProperties.GetName(c) == "저장 형식");
-                format.IsDropDownOpen = true; await LayoutAsync(window); format.SelectedItem = "mkv"; format.IsDropDownOpen = false;
+                format.IsDropDownOpen = true; await LayoutAsync(window); format.SelectedValue = "mkv"; format.IsDropDownOpen = false;
                 Check(render.Settings.Format == "mkv", "format dropdown binding and popup");
-                var mode = Find<CheckBox>(Find<SettingsView>(window).Single()).Single(c => c.Content is string text && text.StartsWith("영상 다운로드"));
-                mode.IsChecked = false; render.ModeChangedCommand.Execute(null); await LayoutAsync(window);
-                Check(!render.Settings.IsVideo && render.Settings.Format == "mp3" && (string?)format.SelectedItem == "mp3", "audio mode preserves a valid format selection");
-                Check((string?)format.SelectionBoxItem == "mp3" && Find<TextBlock>(format).Any(t => t.Text == "mp3"), "audio format is visibly rendered after mode change");
-                mode.IsChecked = true; render.ModeChangedCommand.Execute(null); await LayoutAsync(window);
-                Check(render.Settings.IsVideo && render.Settings.Format == "mp4" && (string?)format.SelectedItem == "mp4", "video mode restores a valid format selection");
-                Check((string?)format.SelectionBoxItem == "mp4" && Find<TextBlock>(format).Any(t => t.Text == "mp4"), "video format is visibly rendered after mode change");
+                var mode = Find<RadioButton>(Find<SettingsView>(window).Single()).Single(c => Equals(c.Content, "영상 다운로드"));
+                var audioMode = Find<RadioButton>(Find<SettingsView>(window).Single()).Single(c => Equals(c.Content, "오디오만 다운로드"));
+                audioMode.IsChecked = true; await LayoutAsync(window);
+                Check(!render.Settings.IsVideo && render.Settings.Format == "mp3" && (string?)format.SelectedValue == "mp3", "audio mode preserves a valid format selection");
+                Check(format.SelectionBoxItem is MediaFormatChoice { Id: "mp3" } && Find<TextBlock>(format).Any(t => t.Text.StartsWith("MP3")), "audio format is visibly rendered after mode change");
+                mode.IsChecked = true; await LayoutAsync(window);
+                Check(render.Settings.IsVideo && render.Settings.Format == "mp4" && (string?)format.SelectedValue == "mp4", "video mode restores a valid format selection");
+                Check(format.SelectionBoxItem is MediaFormatChoice { Id: "mp4" } && Find<TextBlock>(format).Any(t => t.Text == "MP4"), "video format is visibly rendered after mode change");
             }
             await Capture(window, Path.Combine(artifacts, panel.ToLowerInvariant() + ".png"));
         }
@@ -300,7 +304,7 @@ internal static partial class Program
         var editor = vm.ItemSettings!;
         await editor.LoadSubtitlesAsync(); editor.UseDefaults = false; editor.IsVideo = false; await LayoutAsync(window);
         var format = Find<ComboBox>(window).Single(c => System.Windows.Automation.AutomationProperties.GetName(c) == "영상별 저장 형식");
-        Check((string?)format.SelectionBoxItem == "mp3", "per-item audio format is visibly rendered");
+        Check(format.SelectionBoxItem is MediaFormatChoice { Id: "mp3" }, "per-item audio format is visibly rendered");
         await Capture(window, Path.Combine(artifacts, "item-settings.png"));
         var scroller = Find<ScrollViewer>(Find<ItemSettingsView>(window).Single()).First();
         scroller.ScrollToBottom(); await LayoutAsync(window);
@@ -427,7 +431,8 @@ internal static partial class Program
             token.ThrowIfCancellationRequested();
             string marker = CommandLine.Quote("-o") + " ";
             int index = arguments.IndexOf(marker, StringComparison.Ordinal);
-            if (index < 0) return Task.FromResult(new ProcessResult(0, Path.GetFileName(executable) == "deno.exe" ? "deno 2.5.0" : "test version", ""));
+            if (Path.GetFileName(executable) == "ffprobe.exe" && arguments.Contains("-show_streams")) return Task.FromResult(new ProcessResult(0, "{\"streams\":[{\"codec_type\":\"video\",\"codec_name\":\"h264\"},{\"codec_type\":\"audio\",\"codec_name\":\"aac\"}],\"format\":{\"duration\":\"1\",\"format_name\":\"mov,mp4,m4a\"}}", ""));
+            if (index < 0) return Task.FromResult(new ProcessResult(0, Path.GetFileName(executable) == "deno.exe" ? "deno 2.5.0" : Path.GetFileName(executable).StartsWith("ff") ? "ffmpeg version 8.0" : "2026.10.22", ""));
             string quoted = arguments[(index + marker.Length)..];
             string path = quoted[1..quoted.IndexOf('"', 1)].Replace("%(ext)s", "mp4").Replace("%%", "%");
             File.WriteAllBytes(path, [0, 0, 0, 24, 102, 116, 121, 112, 105, 115, 111, 109, 0, 0, 0, 0]);

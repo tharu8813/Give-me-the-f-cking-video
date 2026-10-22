@@ -11,7 +11,7 @@ using GMTFV.Core;
 using GMTFV.DownloadEngine;
 using Newtonsoft.Json;
 
-internal static class Program {
+internal static partial class Program {
     private static int passed, failed;
     private static readonly string Self = Environment.ProcessPath;
     private static readonly string Root = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "gmtfv-tests-" + Guid.NewGuid().ToString("N"));
@@ -23,6 +23,7 @@ internal static class Program {
             Console.Write(JsonConvert.SerializeObject(YtDlpClient.CommonArguments(args[1]).Concat(YtDlpDownloadCommandFactory.Create(request, args[4]))));
             return 0;
         }
+        if (args.Length is 6 or 7 && args[0] == "--media-download") return MediaDownload(args);
         Directory.CreateDirectory(Root);
         try { Run().GetAwaiter().GetResult(); }
         finally { Directory.Delete(Root, true); }
@@ -31,6 +32,7 @@ internal static class Program {
     }
 
     private static async Task Run() {
+        await CheckStabilityAsync();
         foreach (string url in new[] { "https://youtu.be/" + Id, "https://www.youtube.com/watch?v=" + Id + "&list=xyz", "https://m.youtube.com/shorts/" + Id, "https://youtube.com/live/" + Id, "http://music.youtube.com/watch?v=" + Id })
             await Test("normalize " + url, () => { Equal("https://www.youtube.com/watch?v=" + Id, YouTubeUrl.Normalize(url)); return Task.CompletedTask; });
         foreach (string url in new[] { "https://evil.com/youtube.com/watch?v=" + Id, "https://youtube.com.evil.com/watch?v=" + Id, "file:///youtube.com/watch?v=" + Id, "https://youtube.com@evil.com/watch?v=" + Id, "https://youtu.be/" + Id + "EXTRA", "https://youtube.com:8443/watch?v=" + Id, "https://youtu.be/short", "" })
@@ -45,7 +47,7 @@ internal static class Program {
         await Test("webm selects compatible streams", () => { var request = Request(); request.Extension = "webm"; Check(string.Join(" ", YtDlpDownloadCommandFactory.Create(request, "out")).Contains("bestvideo[ext=webm]+bestaudio[ext=webm]")); return Task.CompletedTask; });
         await Test("FFmpeg single scoped encode with CPU fallback", () => { var request = Request(); request.Extension = "avi"; request.VideoEncoder = "h264_nvenc"; var args = YtDlpDownloadCommandFactory.Create(request, "out"); Equal(1, args.Count(a => a == "--postprocessor-args")); Check(args.Contains("VideoConvertor+ffmpeg_o:-c:v h264_nvenc -vtag H264 -c:a libmp3lame -b:a 192k")); Check(string.Join(" ", YtDlpDownloadCommandFactory.Create(request, "out", cpu: true)).Contains("-c:v libx264")); return Task.CompletedTask; });
         foreach (string extension in MediaFormats.Audio)
-            await Test("audio " + extension, () => { var request = Request(); request.IsVideo = false; request.Extension = extension; var args = YtDlpDownloadCommandFactory.Create(request, "out"); Check(args.Contains("--extract-audio")); Check(args.Contains(extension == "ogg" ? "vorbis" : extension)); Check(!args.Contains("--merge-output-format")); if (extension == "aac") Check(args.Contains("--remux-video")); return Task.CompletedTask; });
+            await Test("audio source command " + extension, () => { var request = Request(); request.IsVideo = false; request.Extension = extension; var args = YtDlpDownloadCommandFactory.Create(request, "out"); Check(!args.Contains("--extract-audio") && !args.Contains("--audio-quality") && !args.Contains("--merge-output-format")); Equal(extension == "original" ? "bestaudio" : "bestaudio/best", args[args.IndexOf("-f") + 1]); return Task.CompletedTask; });
         await Test("reject injected codec/format", async () => { var request = Request(); request.Extension = "mp4 --exec evil"; await Throws<ArgumentException>(() => YtDlpDownloadCommandFactory.Create(request, "out")); request.Extension = "avi"; request.VideoEncoder = "libx264 -exec evil"; await Throws<ArgumentException>(() => YtDlpDownloadCommandFactory.Create(request, "out")); });
 
         var errors = new Dictionary<string, DownloadError> {
@@ -175,16 +177,19 @@ internal static class Program {
     private sealed class FakeRunner : IProcessRunner {
         public int DownloadCalls, Failures;
         public bool OmitOutput;
+        public string OutputExtension = "mp4", ProbeOutput;
+        public bool ProbeVideo = true;
         public string ErrorText = "connection reset by peer";
         public string DenoVersion = "deno 2.5.0";
         public readonly List<string[]> Commands = new List<string[]>();
         public Task<ProcessResult> RunAsync(string executable, string arguments, TimeSpan timeout, CancellationToken token, Action<string> output = null, Action<string> error = null) {
             token.ThrowIfCancellationRequested();
             string[] args = Split(arguments);
+            if (Path.GetFileName(executable) == "ffprobe.exe" && args.Contains("-show_streams")) return Task.FromResult(new ProcessResult(0, ProbeOutput ?? ProbeJson("aac", "mov,mp4,m4a,3gp,3g2,mj2", ProbeVideo), ""));
             if (!args.Contains("-o")) return Task.FromResult(new ProcessResult(0, Path.GetFileName(executable) == "deno.exe" ? DenoVersion : "2026.07.04", ""));
             DownloadCalls++;
             Commands.Add(args);
-            string path = args[Array.IndexOf(args, "-o") + 1].Replace("%(ext)s", "mp4").Replace("%%", "%");
+            string path = args[Array.IndexOf(args, "-o") + 1].Replace("%(ext)s", OutputExtension).Replace("%%", "%");
             if (!OmitOutput) { Directory.CreateDirectory(Path.GetDirectoryName(path)); WriteMp4(path); output?.Invoke("GMTFV_FILE:" + JsonConvert.SerializeObject(path)); }
             output?.Invoke("GMTFV_PROGRESS:downloading|50.0%|1MiB/s|10");
             return Task.FromResult(new ProcessResult(DownloadCalls <= Failures ? 1 : 0, "", DownloadCalls <= Failures ? ErrorText : ""));
@@ -203,6 +208,8 @@ internal static class Program {
             case "echo": Console.Write(JsonConvert.SerializeObject(args.Skip(1))); return 0;
             case "fail": Console.Error.WriteLine("requested failure"); return 7;
             case "sleep": Thread.Sleep(30000); return 0;
+            case "flood": for (int i = 0; i < 18000; i++) { Console.WriteLine(new string('o', 1024)); if (i % 10 == 0) Console.Error.WriteLine(new string('e', 1024)); } Console.WriteLine("OUT-END"); return 0;
+            case "longline": Console.Write(new string('x', 18000000)); Console.WriteLine(); Console.WriteLine("OUT-END"); return 0;
             case "streams": for (int i = 0; i < 1000; i++) { Console.WriteLine(new string('o', 1024)); Console.Error.WriteLine(new string('e', 1024)); } Console.WriteLine("OUT-END"); Console.Error.WriteLine("ERR-END"); return 0;
             case "child": using (var child = Process.Start(new ProcessStartInfo(Self, "--fake sleep") { UseShellExecute = false, CreateNoWindow = true })) { Console.WriteLine(child.Id); Console.Out.Flush(); Thread.Sleep(30000); } return 0;
             default: return 2;
